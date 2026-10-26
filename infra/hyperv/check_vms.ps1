@@ -54,9 +54,11 @@ else     { Show $false "Commutateur '$SwitchName'" 'absent (lancer create_vms.ps
 
 $gw = @(Get-NetIPAddress -IPAddress "$Subnet.1" -ErrorAction SilentlyContinue)
 $gwNames = ($gw | ForEach-Object { $_.InterfaceAlias }) -join ', '
-Show ($gw.Count -eq 1) "Passerelle $Subnet.1 sur l'hote" ("{0} interface(s) : {1}" -f $gw.Count, $gwNames)
-if ($gw.Count -gt 1) {
-    Write-Host "     Plusieurs cartes vEthernet portent $Subnet.1 (reste d'un essai precedent) : le trafic vers les VM part sur la mauvaise carte." -ForegroundColor Yellow
+$expectedAlias = "vEthernet ($SwitchName)"
+$gwOk = ($gw.Count -eq 1) -and ($gw[0].InterfaceAlias -eq $expectedAlias)
+Show $gwOk "Passerelle $Subnet.1 sur l'hote" ("{0} interface(s) : {1} (attendu : {2})" -f $gw.Count, $gwNames, $expectedAlias)
+if ((-not $gwOk) -and ($gw.Count -ge 1)) {
+    Write-Host "     $Subnet.1 est portee par une autre carte que celle du commutateur '$SwitchName' (reste d'un essai precedent) : les VM ne joindront pas l'hote. Voir docs/installation_vm.md, Depannage SSH, cause 1." -ForegroundColor Yellow
 }
 
 $nats = @(Get-NetNat -ErrorAction SilentlyContinue | Where-Object { $_.InternalIPInterfaceAddressPrefix -eq "$Subnet.0/24" })
