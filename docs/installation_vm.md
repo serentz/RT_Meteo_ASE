@@ -82,7 +82,7 @@ Avec `-Only`, seules les VM nommées et leurs dossiers dans `-VmRoot` sont suppr
 
 ## Suite
 
-Installer PostgreSQL sur pg01, Grafana sur bastion puis ASE depuis un média SAP et une licence adaptés. Installer ensuite le client/driver PostgreSQL, le driver ASE et l'agent Python sur ase01. Aucune de ces étapes applicatives n'est encore effectuée par cette livraison.
+Installer PostgreSQL sur pg01 et créer le schéma, puis le scrutateur Python (et plus tard Grafana) sur bastion, puis ASE depuis un média SAP et une licence adaptés sur ase01. ase01 ne reçoit ni agent ni client PostgreSQL : le scrutateur interroge ASE à distance. Marche à suivre : [docs/scrutateur.md](scrutateur.md). Aucune de ces étapes applicatives n'est effectuée par le script Hyper-V.
 
 ## Références
 
