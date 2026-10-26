@@ -41,9 +41,9 @@ Intervalle : 60 secondes (`SCRUTATEUR_INTERVALLE_S`), cadence fixe sans dérive.
 - `execution_time` : durée de la requête en cours **en secondes**.
 - l'identité du processus : `spid`, `uid`, login (`suser_name(suid)`), `status`, `hostname`, `program_name`, `hostprocess`, `cmd`.
 
-Lignes retenues : requête en cours, ou bloqué, ou **bloqueur** d'un autre processus (un bloqueur est souvent inactif ; sans cette clause il ne figurerait pas dans le tableau et resterait anonyme). Sont exclus : la connexion du scrutateur (`@@spid`) et les processus dont `uid <= 1`.
+Lignes retenues : requête en cours, ou bloqué, ou **bloqueur** d'un autre processus (un bloqueur est souvent inactif ; sans cette clause il ne figurerait pas dans le tableau et resterait anonyme). Sont exclus : la connexion du scrutateur (`@@spid`) les processus dont `uid <= 0` et le processus interne d'ASE de `program_name` « JOB SCHEDULER » (les sessions sans `program_name` sont conservées).
 
-**Réserves.** La requête a été validée sous `isql` par l'équipe sur une instance réelle, mais `execution_time` ne figure pas dans la page de documentation SAP de `sysprocesses` consultée : son sens (secondes de la requête en cours) est celui indiqué par l'équipe, à confirmer avec une requête longue (`WAITFOR DELAY`). Le filtre `uid > 1` écarte aussi toute session dont l'utilisateur, dans sa base courante, est `dbo` (uid 1) : à vérifier que les sessions applicatives attendues sont bien listées (points à valider dans `sql/ase/supervision.sql`).
+**Réserves.** La requête a été validée sous `isql` par l'équipe sur une instance réelle en ASE 16.0 SP04 PL06, mais `execution_time` ne figure pas dans la page de documentation SAP de `sysprocesses` consultée : son sens (secondes de la requête en cours) est celui indiqué par l'équipe, à confirmer avec une requête longue (`WAITFOR DELAY`). Les exclusions (`uid > 0`, « JOB SCHEDULER ») sont celles indiquées par l'équipe ; à vérifier qu'aucune autre tâche interne ne reste dans le tableau (points à valider dans `sql/ase/supervision.sql`).
 
 **Limites assumées.** Les transactions ouvertes ne sont plus mesurées. Une session inactive qui garde une transaction ouverte n'apparaît dans le tableau que si elle bloque un autre processus.
 

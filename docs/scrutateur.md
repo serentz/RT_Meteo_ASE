@@ -105,4 +105,4 @@ Réalisé dans l'environnement de préparation (Linux) :
 - schéma, vues, fonction d'écriture et droits des rôles testés sur un vrai PostgreSQL 16 ;
 - code du scrutateur exécuté de bout en bout contre ce PostgreSQL, avec une instance ASE simulée.
 
-**Non réalisé, à valider sur les VM** : connexion réelle à ASE (pyodbc + FreeTDS, TDS 5.0), pilote `psycopg`, service systemd, exécution de la requête ASE par le scrutateur sur une vraie instance (la requête elle-même a été essayée sous `isql` par l'équipe ; restent les quatre points à valider listés dans `sql/ase/supervision.sql`, dont le sens de `execution_time` et l'effet du filtre `uid > 1`), et les scénarios d'acceptation 1 à 3.
+**Non réalisé, à valider sur les VM** : connexion réelle à ASE (pyodbc + FreeTDS, TDS 5.0), pilote `psycopg`, service systemd, exécution de la requête ASE par le scrutateur sur une vraie instance (la requête elle-même a été essayée sous `isql` par l'équipe ; restent les quatre points à valider listés dans `sql/ase/supervision.sql`, dont le sens de `execution_time` et la présence éventuelle d'autres tâches internes dans le tableau), et les scénarios d'acceptation 1 à 3.

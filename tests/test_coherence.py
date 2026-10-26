@@ -26,6 +26,10 @@ class TestCoherence(unittest.TestCase):
         self.assertTrue(SQL_PROCESSUS.lstrip().upper().startswith("SELECT"))
         self.assertNotRegex(SQL_PROCESSUS.upper(), r"\b(INSERT|UPDATE|DELETE|DROP|EXEC|TRUNCATE)\b")
 
+    def test_la_requete_exclut_le_job_scheduler_sans_ecarter_les_program_name_vides(self):
+        self.assertIn("isnull(p.program_name, '') <> 'JOB SCHEDULER'", SQL_PROCESSUS)
+        self.assertIn("p.uid > 0", SQL_PROCESSUS)
+
     def test_la_requete_exclut_la_session_du_scrutateur(self):
         self.assertIn("@@spid", SQL_PROCESSUS)
 
