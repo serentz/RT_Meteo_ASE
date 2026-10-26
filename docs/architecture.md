@@ -47,6 +47,8 @@ Lignes retenues : requête en cours, ou bloqué, ou **bloqueur** d'un autre proc
 
 **Limites assumées.** Les transactions ouvertes ne sont plus mesurées. Une session inactive qui garde une transaction ouverte n'apparaît dans le tableau que si elle bloque un autre processus.
 
+**Impact minimal sur les instances.** Le scrutateur ne lit aucune table de monitoring MDA (`mon*`) : elles sont utilisées par ASEMON et d'autres outils, et leur lecture peut perturber les compteurs de ces outils. Météo temps réel doit rester légère. Par relevé : une connexion, un seul `SELECT` en lecture seule sur `master..sysprocesses`, en autocommit, puis fermeture. Aucune écriture, aucune table temporaire, aucune modification de la configuration d'ASE (l'option `enable monitoring` n'est pas nécessaire). Au plus un relevé par minute et par instance (si le précédent n'est pas terminé, le cycle est sauté), avec des délais de 10 s (connexion) et 15 s (requête). Cette règle prime sur l'ajout d'indicateurs : un indicateur qui exigerait les tables MDA est hors périmètre.
+
 **Sécurité.** Les identifiants ASE sont en clair dans `meteo.instance` (choix du POC). Seul le rôle `scrutateur` les lit ; `grafana_ro` n'a aucun droit sur les colonnes `login` et `password`. Utiliser un login ASE dédié, en lecture seule. Le mot de passe PostgreSQL du scrutateur est dans `/etc/scrutateur/scrutateur.env` (mode 0640, hors Git). Les mots de passe ne figurent jamais dans les journaux ni dans les messages d'erreur stockés.
 
 ## Indicateurs affichés

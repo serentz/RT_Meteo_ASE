@@ -30,6 +30,13 @@ class TestCoherence(unittest.TestCase):
         self.assertIn("isnull(p.program_name, '') <> 'JOB SCHEDULER'", SQL_PROCESSUS)
         self.assertIn("p.uid > 0", SQL_PROCESSUS)
 
+    def test_aucune_table_de_monitoring_mda(self):
+        # Les tables mon* (MDA) sont lues par ASEMON et d'autres outils : le scrutateur n'y touche jamais.
+        self.assertNotRegex(SQL_PROCESSUS.lower(), r"\bmon[a-z]+\b")
+        fichier = (RACINE / "sql" / "ase" / "supervision.sql").read_text(encoding="utf-8")
+        requetes = "\n".join(l for l in fichier.splitlines() if not l.lstrip().startswith("--"))
+        self.assertNotRegex(requetes.lower(), r"\bmon[a-z]+\b")
+
     def test_la_requete_exclut_la_session_du_scrutateur(self):
         self.assertIn("@@spid", SQL_PROCESSUS)
 
