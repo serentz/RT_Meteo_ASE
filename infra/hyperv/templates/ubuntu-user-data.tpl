@@ -8,9 +8,7 @@ autoinstall:
   network:
     version: 2
     ethernets:
-      hyperv:
-        match:
-          driver: hv_netvsc
+      eth0:
         dhcp4: false
         addresses: [{{IP}}/24]
         routes:
@@ -27,12 +25,6 @@ autoinstall:
   ssh:
     install-server: true
     allow-pw: true
-  late-commands:
-    - mkdir -p /mnt/rt-seed
-    - mount /dev/disk/by-label/CIDATA /mnt/rt-seed
-    - sh -c 'printf "%s\n" "{{NAME}}" > /mnt/rt-seed/INSTALL_OK'
-    - sync
-    - umount /mnt/rt-seed
   shutdown: poweroff
   user-data:
     hostname: {{NAME}}

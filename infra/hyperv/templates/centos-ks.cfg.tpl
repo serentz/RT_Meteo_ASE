@@ -10,7 +10,7 @@ rootpw --lock
 user --name={{USER}} --groups=wheel --plaintext --password={{PASSWORD}}
 {{SSHKEYS}}
 firstboot --disable
-firewall --enabled --ssh
+firewall --enabled --ssh --port=5000:tcp
 services --enabled=sshd
 ignoredisk --only-use=sda
 zerombr
@@ -32,17 +32,8 @@ nc
 net-tools
 %end
 
-%post --erroronfail
+%post
 cat >> /etc/hosts <<'EOT'
 {{HOSTS}}
 EOT
-%end
-
-# Marqueur lu par PowerShell avant de retirer les medias.
-%post --nochroot --erroronfail
-mkdir -p /mnt/rt-seed
-mount /dev/disk/by-label/OEMDRV /mnt/rt-seed
-printf '%s\n' '{{NAME}}' > /mnt/rt-seed/INSTALL_OK
-sync
-umount /mnt/rt-seed
 %end

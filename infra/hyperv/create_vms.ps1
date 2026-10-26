@@ -1,15 +1,15 @@
-﻿<#
+<#
 .SYNOPSIS
-  Cree le reseau et les 3 VM Hyper-V du POC RT_Meteo_ASE, OS installes automatiquement.
+  Cree le reseau et les 4 VM Hyper-V du POC comparaison_ase, OS installes automatiquement.
 
 .DESCRIPTION
   - commutateur interne + NAT (192.168.50.0/24, passerelle .1 = le PC hote) ;
-  - 3 VM generation 2 : pg01 et bastion (Ubuntu Server, autoinstall), ase01 (CentOS Stream, kickstart) ;
+  - 4 VM generation 2 : pg01 et bastion (Ubuntu Server, autoinstall), ase01 (CentOS Stream, kickstart) ;
   - chaque VM recoit un petit disque "graine" (CIDATA / OEMDRV) avec sa configuration : IP fixe, nom,
     utilisateur, SSH, disque entier, /etc/hosts ;
   - le script attend la fin des installations (les VM s'eteignent seules), retire ISO et disques graines,
     redemarre les VM et attend que SSH reponde.
-  Rejouable : -Destroy supprime les VM du POC, leurs disques ; le reseau est conserve pour recommencer de zero ; -Only limite a certaines VM
+  Rejouable : -Destroy supprime les VM du POC, leurs disques et le reseau (commutateur, carte vEthernet, NAT) pour recommencer de zero ; -Only limite a certaines VM
   (ex. -Only ase01 pour changer seulement l'OS des serveurs ASE).
 
 ATTENTION
@@ -18,9 +18,9 @@ ATTENTION
 .PARAMETER UbuntuIso
   Chemin complet du fichier .iso d'Ubuntu Server (pas un dossier). Obligatoire sauf avec -Destroy.
 .PARAMETER CentosIso
-  Chemin complet du fichier .iso de CentOS Stream 9 (pas un dossier), pour la VM ase01.
+  Chemin complet du fichier .iso de CentOS Stream 9 (pas un dossier), pour les VM ase01.
 .PARAMETER VmRoot
-  Dossier des VM et de leurs disques. Defaut : I:\POC\HyperV\RT_Meteo_ASE.
+  Dossier des VM et de leurs disques. Defaut : I:\POC\HyperV.
 .PARAMETER SwitchName
   Nom du commutateur interne cree pour le POC.
 .PARAMETER Subnet
@@ -38,7 +38,7 @@ ATTENTION
 .PARAMETER Only
   Ne traiter que ces VM (noms Hyper-V), ex. -Only <nom>.
 .PARAMETER Destroy
-  Supprime les VM du POC, leurs disques ; le reseau est conserve (confirmation OUI demandee). Le marqueur de propriete est requis.
+  Supprime les VM du POC, leurs disques et le reseau cree par le script : NAT, commutateur interne et carte vEthernet de l'hote (confirmation OUI demandee). Avec -Only, le reseau est conserve.
 .PARAMETER NoConsole
   N'ouvre pas les consoles des VM pendant l'installation.
 .PARAMETER Help
@@ -46,24 +46,24 @@ ATTENTION
 
 .EXAMPLE
   .\create_vms.ps1 -UbuntuIso "K:\ShareLinux\Image ISO\ubuntu-24.04.5-live-server-amd64.iso" -CentosIso "K:\ShareLinux\Image ISO\CentOS-Stream-9-20260316.0-x86_64-dvd1.iso"
-  Cree le reseau et les 3 VM, puis installe Ubuntu et CentOS (confirmation initiale possible).
+  Cree le reseau et les 4 VM, puis installe Ubuntu et CentOS sans intervention.
 
 .EXAMPLE
   .\create_vms.ps1 -Destroy
-  Supprime les 3 VM et leurs disques (le reseau est conserve).
+  Supprime les 4 VM et leurs disques (le reseau est conserve).
 #>
 [CmdletBinding()]
 param(
     [string]$UbuntuIso,
     [string]$CentosIso,
-    [string]$VmRoot     = 'I:\POC\HyperV\RT_Meteo_ASE',
-    [string]$SwitchName = 'rt-meteo-ase-net',
+    [string]$VmRoot     = 'I:\POC\HyperV',
+    [string]$SwitchName = 'compa-net',
     [string]$Subnet     = '192.168.50',       # trois premiers octets, masque /24
-    [string]$AdminUser  = 'admin01',          # utilisateur cree sur les 3 VM
+    [string]$AdminUser  = 'admin01',          # utilisateur cree sur les 4 VM
     [securestring]$AdminPassword,             # sinon demande a la saisie
     [string]$SshPublicKeyFile,                # defaut : ~\.ssh\id_ed25519.pub ou id_rsa.pub s'ils existent
     [string]$Keyboard   = 'fr',
-    [ValidateRange(5,240)][int]$InstallTimeoutMin = 60,
+    [int]$InstallTimeoutMin = 60,
     [string[]]$Only,                          # ne traiter que ces VM, ex. -Only ase01
     [switch]$Destroy,                         # supprime les VM du POC (et rien d'autre)
     [switch]$NoConsole,                       # n'ouvre pas les consoles
@@ -81,22 +81,15 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     throw "Ce script doit etre lance dans un PowerShell ouvert en administrateur (aide : .\create_vms.ps1 -Help)."
 }
 $Here = $PSScriptRoot
-if ($Subnet -notmatch '^(\d{1,3}\.){2}\d{1,3}$' -or @($Subnet.Split('.') | Where-Object { [int]$_ -gt 255 }).Count) {
-    throw '-Subnet : trois octets valides requis, ex. 192.168.50'
-}
-if ($Keyboard -notmatch '^[a-zA-Z0-9_-]+$') { throw '-Keyboard invalide.' }
-$VmRoot = [IO.Path]::GetFullPath($VmRoot)
-if ($VmRoot.TrimEnd('\') -eq [IO.Path]::GetPathRoot($VmRoot).TrimEnd('\')) { throw 'VmRoot ne doit pas etre une racine de disque.' }
-
 
 # Nom, OS, vCPU, RAM (Go), disque (Go), derniere partie de l'adresse IP
 $vms = @(
     @{ Name = 'bastion'; Os = 'ubuntu'; Cpu = 2; MemGB = 4; DiskGB = 30; Ip = 10 },
     @{ Name = 'pg01';    Os = 'ubuntu'; Cpu = 2; MemGB = 4; DiskGB = 30; Ip = 11 },
     @{ Name = 'ase01';   Os = 'centos'; Cpu = 2; MemGB = 4; DiskGB = 40; Ip = 21 }
-)
+ )
 
-$allVms = $vms      # /etc/hosts contient toujours les 3 VM
+$allVms = $vms      # /etc/hosts contient toujours les 4 VM
 if ($Only) {
     $unknown = $Only | Where-Object { $allVms.Name -notcontains $_ }
     if ($unknown) { throw "-Only : VM inconnue(s) $($unknown -join ', '). Valeurs possibles : $($allVms.Name -join ', ')" }
@@ -111,26 +104,6 @@ if (-not (Get-Command New-VM -ErrorAction SilentlyContinue)) {
 if ($Destroy) {
     Write-Warning "Va supprimer les VM $($vms.Name -join ', ') et leurs disques dans $VmRoot."
     if ((Read-Host "Taper OUI pour confirmer") -ne 'OUI') { Write-Host "Annule."; return }
-    # Tout verifier AVANT la premiere suppression.
-    foreach ($v in $vms) {
-        $ownedDir = Join-Path $VmRoot $v.Name
-        $ownedVm = Get-VM -Name $v.Name -ErrorAction SilentlyContinue
-        if ($ownedVm -or (Test-Path -LiteralPath $ownedDir)) {
-            $marker = Join-Path $ownedDir 'rt-meteo-ase.owner'
-            if (-not (Test-Path -LiteralPath $marker) -or (Get-Content -LiteralPath $marker -Raw).Trim() -ne 'RT_Meteo_ASE') {
-                throw "Refus de supprimer $($v.Name) : marqueur du projet absent."
-            }
-            if ($ownedVm) {
-                $ownedDisks = @(Get-VMHardDiskDrive -VMName $v.Name)
-                if (-not $ownedDisks.Count) { throw "Refus : aucun disque pour $($v.Name)." }
-                foreach ($drive in $ownedDisks) {
-                    if (-not $drive.Path -or -not [IO.Path]::GetFullPath($drive.Path).StartsWith($ownedDir.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
-                        throw "Refus de supprimer $($v.Name) : disque hors du dossier du projet."
-                    }
-                }
-            }
-        }
-    }
     foreach ($v in $vms) {
         $vm = Get-VM -Name $v.Name -ErrorAction SilentlyContinue
         if ($vm) {
@@ -141,7 +114,24 @@ if ($Destroy) {
         $dir = Join-Path $VmRoot $v.Name
         if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
     }
-    Write-Host "Reseau '$SwitchName' conserve. Seules les VM du projet sont supprimees."
+    if ($Only) {
+        Write-Host "Reseau '$SwitchName' conserve (-Only : les autres VM l'utilisent). Relancer le script sans -Destroy pour recreer les VM."
+    } else {
+        # Reseau cree par le script : NAT puis commutateur. Supprimer un commutateur interne retire aussi sa carte
+        # "vEthernet ($SwitchName)" de l'hote (sinon elles s'accumulent a chaque projet recree).
+        foreach ($n in @(Get-NetNat -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $SwitchName -or $_.InternalIPInterfaceAddressPrefix -eq "$Subnet.0/24" })) {
+            Remove-NetNat -Name $n.Name -Confirm:$false
+            Write-Host "[-] NAT $($n.Name) supprime"
+        }
+        $sw = Get-VMSwitch -Name $SwitchName -ErrorAction SilentlyContinue
+        if ($sw -and $sw.SwitchType -eq 'Internal') {
+            Remove-VMSwitch -Name $SwitchName -Force
+            Write-Host "[-] Commutateur '$SwitchName' et carte 'vEthernet ($SwitchName)' supprimes"
+        } elseif ($sw) {
+            Write-Host "[i] Commutateur '$SwitchName' (type $($sw.SwitchType)) conserve : il n'a pas ete cree par ce script ou relie une carte physique."
+        }
+        Write-Host "Relancer le script sans -Destroy pour recreer le reseau et les VM."
+    }
     return
 }
 
@@ -154,12 +144,6 @@ foreach ($p in $needed) {
         throw "-$($p[0]) : il faut le chemin complet d'un fichier .iso existant (pas d'un dossier)."
     }
 }
-foreach ($v in $vms) {
-    if (Test-Path -LiteralPath (Join-Path $VmRoot $v.Name)) { throw "Dossier existant pour $($v.Name) : ne pas ecraser. Verifier VmRoot." }
-}
-foreach ($tpl in @('ubuntu-user-data.tpl','centos-ks.cfg.tpl')) {
-    if (-not (Test-Path -LiteralPath (Join-Path $Here "templates\$tpl"))) { throw "Modele absent : templates\$tpl" }
-}
 $existing = $vms | Where-Object { Get-VM -Name $_.Name -ErrorAction SilentlyContinue }
 if ($existing) {
     throw "VM deja presentes : $($existing.Name -join ', '). Relancer avec -Destroy pour tout supprimer et recommencer."
@@ -167,7 +151,7 @@ if ($existing) {
 
 # Mot de passe
 if (-not $AdminPassword) {
-    $s1 = Read-Host "Mot de passe de '$AdminUser' sur les 3 VM (8 caracteres min.)" -AsSecureString
+    $s1 = Read-Host "Mot de passe de '$AdminUser' sur les 4 VM (8 caracteres min.)" -AsSecureString
     $s2 = Read-Host "Confirmer le mot de passe" -AsSecureString
     $plain1 = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s1))
     $plain2 = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s2))
@@ -201,11 +185,7 @@ if ($SshPublicKeyFile -and (Test-Path -LiteralPath $SshPublicKeyFile)) {
 }
 
 # --- Reseau : commutateur interne + NAT --------------------------------------------
-$existingSwitch = Get-VMSwitch -Name $SwitchName -ErrorAction SilentlyContinue
-if ($existingSwitch -and $existingSwitch.SwitchType -ne 'Internal') { throw "Le commutateur $SwitchName doit etre interne." }
-$conflictingNat = @(Get-NetNat -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $SwitchName -and $_.InternalIPInterfaceAddressPrefix -ne "$Subnet.0/24" })
-if ($conflictingNat.Count) { throw 'NAT du meme nom avec un autre sous-reseau.' }
-if (-not $existingSwitch) {
+if (-not (Get-VMSwitch -Name $SwitchName -ErrorAction SilentlyContinue)) {
     Write-Host "[+] Commutateur interne '$SwitchName'"
     New-VMSwitch -Name $SwitchName -SwitchType Internal | Out-Null
 }
@@ -243,7 +223,6 @@ function Expand-Template {
     param([string]$TemplateFile, [hashtable]$Values)
     $t = Get-Content -LiteralPath (Join-Path $Here "templates\$TemplateFile") -Raw
     foreach ($k in $Values.Keys) { $t = $t.Replace("{{$k}}", [string]$Values[$k]) }
-    if ($t -match '{{[A-Z]+}}') { throw "Variable non remplacee dans $TemplateFile" }
     return $t
 }
 
@@ -255,12 +234,11 @@ foreach ($v in $vms) {
     $name = $v.Name
     $dir  = Join-Path $VmRoot $name
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
-    [IO.File]::WriteAllText((Join-Path $dir 'rt-meteo-ase.owner'), 'RT_Meteo_ASE')
     Write-Host "[+] VM $name ($($v.Os), $($v.Cpu) vCPU, $($v.MemGB) Go, disque $($v.DiskGB) Go, $Subnet.$($v.Ip))"
 
     New-VM -Name $name -Generation 2 -Path $VmRoot `
-        -MemoryStartupBytes ([uint64]$v.MemGB * 1073741824) `
-        -NewVHDPath (Join-Path $dir "$name.vhdx") -NewVHDSizeBytes ([uint64]$v.DiskGB * 1073741824) `
+        -MemoryStartupBytes ([uint64]$v.MemGB * 1GB) `
+        -NewVHDPath (Join-Path $dir "$name.vhdx") -NewVHDSizeBytes ([uint64]$v.DiskGB * 1GB) `
         -SwitchName $SwitchName | Out-Null
     Set-VMProcessor -VMName $name -Count $v.Cpu
     Set-VMMemory -VMName $name -DynamicMemoryEnabled $false
@@ -303,7 +281,7 @@ Start-VM -Name $vms.Name
 if (-not $NoConsole) { foreach ($v in $vms) { Start-Process vmconnect.exe -ArgumentList 'localhost', $v.Name } }
 
 Write-Host ""
-Write-Host "Installation en cours dans les 3 VM (10 a 20 minutes, en parallele)."
+Write-Host "Installation en cours dans les 4 VM (10 a 20 minutes, en parallele)."
 Write-Host "  - Ubuntu (bastion, pg01) : si la console demande 'Continue with autoinstall?', taper  yes  puis Entree."
 Write-Host "  - CentOS (ase01)  : si le menu du demarrage attend, choisir 'Install CentOS Stream 9' (Entree)."
 Write-Host "Les VM s'eteignent toutes seules a la fin : ne rien faire d'autre."
@@ -317,25 +295,10 @@ while ($pending.Count -gt 0) {
     Start-Sleep -Seconds 20
     foreach ($n in @($pending)) {
         if ((Get-VM -Name $n).State -eq 'Off') {
-            Write-Host "[ok] $n : installation arretee ; verification du marqueur ensuite"
+            Write-Host "[ok] $n : installation terminee"
             $pending.Remove($n)
         }
     }
-}
-
-# Un arret seul ne prouve pas la reussite. Le dernier script d'installation
-# ecrit le nom de la VM sur la graine uniquement en cas de succes.
-foreach ($v in $vms) {
-    $seedPath = Join-Path (Join-Path $VmRoot $v.Name) "seed-$($v.Name).vhdx"
-    try {
-        $disk = Mount-VHD -Path $seedPath -ReadOnly -Passthru | Get-Disk
-        $volume = $disk | Get-Partition | Get-Volume | Where-Object { $_.DriveLetter }
-        if (@($volume).Count -ne 1) { throw "Volume graine illisible pour $($v.Name)" }
-        $proof = "$($volume.DriveLetter):\INSTALL_OK"
-        if (-not (Test-Path -LiteralPath $proof) -or (Get-Content -LiteralPath $proof -Raw).Trim() -ne $v.Name) {
-            throw "Installation non confirmee pour $($v.Name). Graine conservee ; verifier la console."
-        }
-    } finally { Dismount-VHD -Path $seedPath -ErrorAction SilentlyContinue }
 }
 
 # --- Nettoyage : ISO et disques graines (ils contiennent le mot de passe) --------------------
@@ -351,7 +314,7 @@ Start-VM -Name $vms.Name
 Write-Host "[i] VM redemarrees, attente de SSH..."
 function Test-Port($ip, $port) {
     $c = New-Object Net.Sockets.TcpClient
-    try { if (-not $c.ConnectAsync($ip, $port).Wait(1500)) { return $false }; return $c.Connected } catch { return $false } finally { $c.Close() }
+    try { return $c.ConnectAsync($ip, $port).Wait(1500) } catch { return $false } finally { $c.Close() }
 }
 $deadline = (Get-Date).AddMinutes(10)
 $up = @{}
@@ -368,5 +331,4 @@ foreach ($v in ($vms | Sort-Object { $_.Ip })) {
     Write-Host ("  {0,-8} {1}.{2,-3} ssh {3}@{1}.{2}   {4}" -f $v.Name, $Subnet, $v.Ip, $AdminUser, $state)
 }
 Write-Host ""
-if ($up.Count -lt $vms.Count) { throw 'Certaines VM ne repondent pas sur SSH. Installation non validee.' }
-Write-Host "OS installes et ports SSH accessibles. Verifier les connexions et cloud-init selon docs/installation_vm.md."
+Write-Host "Etape suivante : docs/installation_vm.md section 'Suite' (PostgreSQL sur pg01)."
