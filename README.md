@@ -19,7 +19,7 @@ Voir [Installation des VM](docs/installation_vm.md), [Scrutateur](docs/scrutateu
 ## Fonctionnement
 
 - Le scrutateur lit la table `meteo.instance` (nom, login, mot de passe) et, chaque minute, relève en parallèle toutes les instances actives.
-- Quatre indicateurs par instance : temps max et moyen de blocage, temps max et moyen des transactions ouvertes. Le monitoring des deadlocks est retiré du POC.
+- Quatre indicateurs par instance : temps max et moyen de blocage, temps max et moyen des requêtes en cours. Ils sont tous calculés à partir d'un seul tableau lu sur `master..sysprocesses`. Le monitoring des deadlocks est retiré du POC.
 - Chaque indicateur est comparé à des seuils (warning / alarme) : soleil, nuage, orage ; « inconnu » (lune) si la mesure manque ou est périmée. L'instance affiche son pire niveau.
 
 ## Organisation
@@ -28,11 +28,11 @@ Voir [Installation des VM](docs/installation_vm.md), [Scrutateur](docs/scrutateu
 - `infra/hyperv/check_vms.ps1` : diagnostic en lecture seule (Hyper-V, réseau de l'hôte, ping, port 22, bannière SSH).
 - `images/iconnes/` : icônes météo (soleil, nuages, orages, lune endormie) pour l'affichage.
 - `scrutateur/` : le script Python (une fonction par relevé d'instance, boucle parallèle), son service systemd et son modèle de configuration.
-- `sql/ase/` : les deux requêtes de supervision exécutées sur chaque instance ASE.
+- `sql/ase/` : la requête de supervision exécutée sur chaque instance ASE.
 - `sql/postgresql/` : schéma `meteo` (instances, mesures, seuils, vues d'état, fonction d'écriture) et rôles.
 - `grafana/` : futurs tableaux de bord et provisioning.
 - `tests/` : tests Python (`unittest`) et test SQL du schéma.
 
 ## État de validation
 
-Scrutateur et schéma PostgreSQL : 38 tests Python et un test SQL passent, et le code a été exécuté de bout en bout contre un PostgreSQL 16 réel avec une instance ASE simulée ; la connexion à une vraie instance ASE n'est pas encore validée (détail dans [docs/scrutateur.md](docs/scrutateur.md)). Pour l'infrastructure : contrôles statiques des scripts, des modèles et des remplacements effectués. Exécution PowerShell et installation Hyper-V non réalisées dans l'environnement de préparation Linux. Le premier essai (hors dépôt) s'est arrêté à l'accès SSH aux VM : lancer `infra/hyperv/check_vms.ps1` puis suivre la section « Dépannage SSH » de [Installation des VM](docs/installation_vm.md). Validation Windows et consoles des trois VM indispensable avant de déclarer l'infrastructure opérationnelle.
+Scrutateur et schéma PostgreSQL : 47 tests Python et un test SQL passent, et le code a été exécuté de bout en bout contre un PostgreSQL 16 réel avec une instance ASE simulée ; la connexion à une vraie instance ASE n'est pas encore validée (détail dans [docs/scrutateur.md](docs/scrutateur.md)). Pour l'infrastructure : contrôles statiques des scripts, des modèles et des remplacements effectués. Exécution PowerShell et installation Hyper-V non réalisées dans l'environnement de préparation Linux. Le premier essai (hors dépôt) s'est arrêté à l'accès SSH aux VM : lancer `infra/hyperv/check_vms.ps1` puis suivre la section « Dépannage SSH » de [Installation des VM](docs/installation_vm.md). Validation Windows et consoles des trois VM indispensable avant de déclarer l'infrastructure opérationnelle.

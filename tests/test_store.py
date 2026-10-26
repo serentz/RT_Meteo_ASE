@@ -2,7 +2,7 @@ import json
 import unittest
 
 from scrutateur.indicateurs import calculer_indicateurs
-from scrutateur.modeles import Lecture, LigneProcessus, LigneTransaction, Mesure
+from scrutateur.modeles import Lecture, LigneProcessus, Mesure
 from scrutateur.store import SQL_ENREGISTRER, SQL_INSTANCES, Depot, parametres_enregistrement
 
 
@@ -25,7 +25,11 @@ class FausseConnexion:
 
 
 def mesure_ok():
-    lecture = Lecture([LigneProcessus(11, "lock sleep", "UPDATE", "app", 10, 45)], [LigneTransaction(11, 120)])
+    lecture = Lecture([
+        LigneProcessus(10, "sleeping", "AWAITING COMMAND", "batch", 0),   # bloqueur inactif
+        LigneProcessus(11, "lock sleep", "UPDATE", "app", 10, 45, 120, uid=5, hostname="srv1",
+                       programme="appli", hostprocess="4242"),
+    ])
     return Mesure(7, "ok", 130, indicateurs=calculer_indicateurs(lecture))
 
 
@@ -39,9 +43,16 @@ class TestStore(unittest.TestCase):
     def test_parametres_ok(self):
         p = parametres_enregistrement(mesure_ok())
         self.assertEqual(p[:10], (7, "ok", None, 130, 1, 45.0, 45.0, 1, 120.0, 120.0))
-        details = json.loads(p[10])
-        self.assertEqual(details[0]["spid"], 11)
-        self.assertEqual(details[0]["bloqueur_spid"], 10)
+        details = {d["spid"]: d for d in json.loads(p[10])}
+        self.assertEqual(sorted(details), [10, 11])
+        self.assertEqual(details[11]["bloqueur_spid"], 10)
+        self.assertEqual((details[11]["blocage_s"], details[11]["execution_s"]), (45, 120))
+        self.assertEqual((details[11]["hostname"], details[11]["programme"], details[11]["hostprocess"]),
+                         ("srv1", "appli", "4242"))
+        # processus non bloque : bloqueur et blocage a NULL (jamais 0)
+        self.assertIsNone(details[10]["bloqueur_spid"])
+        self.assertIsNone(details[10]["blocage_s"])
+        self.assertIsNone(details[10]["execution_s"])
 
     def test_parametres_erreur_ont_des_mesures_nulles(self):
         p = parametres_enregistrement(Mesure(7, "erreur", 10, erreur="boom"))

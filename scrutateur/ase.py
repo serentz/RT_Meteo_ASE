@@ -1,12 +1,12 @@
 """Lecture d'une instance SAP ASE a distance (TDS, port 5000 par defaut) depuis le bastion.
 
-Sources verifiees dans la documentation SAP ASE (tables systeme) :
-- master..sysprocesses : blocked = spid du bloqueur (0 si aucun), time_blocked = duree du blocage EN SECONDES,
-  suid = utilisateur (0 pour les taches systeme : hypothese a valider sur l'instance reelle, voir
-  sql/ase/supervision.sql). sysprocesses ne contient PAS la date de debut de transaction.
-- master..systransactions : starttime = debut de la transaction, spid (0 si detachee), type 1 = locale.
+Une seule requete sur master..sysprocesses ; le tableau obtenu est lu en memoire et les indicateurs en sont
+calcules (indicateurs.py). Colonnes : blocked = spid du bloqueur (0 si aucun), time_blocked = duree du blocage
+EN SECONDES, execution_time = duree de la requete en cours EN SECONDES. Requete validee sous isql par l'utilisateur
+sur une instance reelle ; execution_time n'est pas dans la page de documentation SAP consultee (voir
+sql/ase/supervision.sql pour les points restant a valider).
 
-Les deux requetes sont reproduites a l'identique dans sql/ase/supervision.sql pour les essayer sous isql.
+La requete est reproduite a l'identique dans sql/ase/supervision.sql pour l'essayer sous isql.
 Le pilote est charge a la demande (import tardif) : le reste du scrutateur et ses tests n'en ont pas besoin.
 """
 from __future__ import annotations
@@ -14,17 +14,15 @@ from __future__ import annotations
 from typing import Callable
 
 from .config import Reglages
-from .modeles import Instance, Lecture, LigneProcessus, LigneTransaction
+from .modeles import Instance, Lecture, LigneProcessus
 
 SQL_PROCESSUS = """\
-SELECT p.spid, p.status, p.cmd, suser_name(p.suid), p.blocked, p.time_blocked
+SELECT p.spid, p.uid, suser_name(p.suid), p.status, p.hostname, p.program_name, p.hostprocess,
+       p.cmd, p.blocked, p.time_blocked, p.execution_time
 FROM master..sysprocesses p
-WHERE p.suid > 0 AND p.spid <> @@spid"""
-
-SQL_TRANSACTIONS = """\
-SELECT t.spid, datediff(ss, t.starttime, getdate())
-FROM master..systransactions t
-WHERE t.spid > 0 AND t.type = 1"""
+WHERE (p.execution_time IS NOT NULL OR p.time_blocked IS NOT NULL
+       OR p.spid IN (SELECT b.blocked FROM master..sysprocesses b WHERE b.blocked <> 0))
+  AND p.uid > 1 AND p.spid <> @@spid"""
 
 # Fonction qui interroge une instance et rend sa lecture brute (ou leve une exception).
 Source = Callable[[Instance], Lecture]
@@ -66,26 +64,32 @@ def creer_source_odbc(reglages: Reglages) -> Source:
             conn.timeout = reglages.ase_requete_timeout_s
             curseur = conn.cursor()
             curseur.execute(SQL_PROCESSUS)
-            processus = [
-                LigneProcessus(
-                    spid=int(r[0]),
-                    statut=_texte(r[1]),
-                    cmd=_texte(r[2]),
-                    login=_texte(r[3]),
-                    bloqueur_spid=int(r[4] or 0),
-                    blocage_s=int(r[5] or 0),
-                )
-                for r in curseur.fetchall()
-            ]
-            curseur.execute(SQL_TRANSACTIONS)
-            transactions = [
-                LigneTransaction(spid=int(r[0]), age_s=int(r[1] or 0)) for r in curseur.fetchall()
-            ]
-            return Lecture(processus=processus, transactions=transactions)
+            return Lecture(processus=[ligne_processus(r) for r in curseur.fetchall()])
         finally:
             conn.close()
 
     return lire
+
+
+def ligne_processus(r) -> LigneProcessus:
+    """Une ligne de SQL_PROCESSUS (dans l'ordre des colonnes) vers LigneProcessus."""
+    return LigneProcessus(
+        spid=int(r[0]),
+        uid=_entier(r[1]),
+        login=_texte(r[2]),
+        statut=_texte(r[3]),
+        hostname=_texte(r[4]),
+        programme=_texte(r[5]),
+        hostprocess=_texte(r[6]),
+        cmd=_texte(r[7]),
+        bloqueur_spid=_entier(r[8]) or 0,
+        blocage_s=_entier(r[9]),
+        execution_s=_entier(r[10]),
+    )
+
+
+def _entier(valeur) -> int | None:
+    return None if valeur is None else int(float(valeur))
 
 
 def _texte(valeur) -> str | None:

@@ -32,9 +32,9 @@ Le mot de passe est stocké en clair : n'accorder aucun autre droit sur cette ta
 
 ## 2. Instance ASE
 
-1. Créer un login de supervision dédié (voir `sql/ase/supervision.sql`) et vérifier qu'il lit `master..sysprocesses` et `master..systransactions`.
+1. Créer un login de supervision dédié (voir `sql/ase/supervision.sql`) et vérifier qu'il lit `master..sysprocesses`. Aucune autre table n'est lue.
 2. L'instance doit écouter sur le réseau (fichier `interfaces`, pas seulement `localhost`). Le pare-feu CentOS de ase01 ouvre déjà SSH et le port 5000/tcp.
-3. Depuis le bastion, avant d'installer le scrutateur : `TDSVER=5.0 tsql -H ase01 -p 5000 -U scrutateur` (paquet `freetds-bin`), puis coller les deux requêtes de `sql/ase/supervision.sql`.
+3. Depuis le bastion, avant d'installer le scrutateur : `TDSVER=5.0 tsql -H ase01 -p 5000 -U scrutateur` (paquet `freetds-bin`), puis coller la requête de `sql/ase/supervision.sql` : elle rend le tableau des processus dont le scrutateur tire ses indicateurs.
 
 ## 3. Scrutateur sur le bastion
 
@@ -79,7 +79,7 @@ Réglages (variables de `scrutateur.env`) : `SCRUTATEUR_INTERVALLE_S` (60), `SCR
 | `Can't open lib 'FreeTDS'` | Paquet `tdsodbc` absent, ou pilote non déclaré dans `/etc/odbcinst.ini` : régler `SCRUTATEUR_ODBC_PILOTE` sur le nom qui y figure. |
 | `Login timeout expired`, `Unable to connect` | Réseau, port 5000, `interfaces` d'ASE qui n'écoute pas sur le réseau, nom non résolu depuis le bastion. Essayer `tsql` (section 2). |
 | `Login failed` | Mauvais login ou mot de passe dans `meteo.instance`. |
-| Droit refusé sur `systransactions` | Accorder la lecture au login de supervision côté ASE. |
+| `Invalid column name 'execution_time'` ou droit refusé sur `sysprocesses` | La colonne n'existe pas sur cette version d'ASE, ou le login de supervision ne lit pas `master..sysprocesses` : essayer la requête de `sql/ase/supervision.sql` sous `isql`. |
 | Caractères accentués illisibles | Régler `ClientCharset` (en dur dans `scrutateur/ase.py`) selon le jeu de caractères d'ASE. |
 | Instance en « inconnu » alors qu'elle répond | Relevé périmé (plus de 180 s) : lire `journalctl -u scrutateur` et `erreur` dans `meteo.etat_instance`. |
 
@@ -101,8 +101,8 @@ psql -d meteo_test -v ON_ERROR_STOP=1 -f tests/postgresql/test_schema.sql
 
 Réalisé dans l'environnement de préparation (Linux) :
 
-- 38 tests Python (calculs, parallélisme, panne d'une instance, instance bloquée non relancée, relecture de `meteo.instance`, panne de PostgreSQL, mot de passe masqué) ;
+- 47 tests Python (calculs sur le tableau, lecture ASE avec un faux pilote, parallélisme, panne d'une instance, instance bloquée non relancée, relecture de `meteo.instance`, panne de PostgreSQL, mot de passe masqué, cohérence entre la requête, le fichier SQL et le schéma) ;
 - schéma, vues, fonction d'écriture et droits des rôles testés sur un vrai PostgreSQL 16 ;
 - code du scrutateur exécuté de bout en bout contre ce PostgreSQL, avec une instance ASE simulée.
 
-**Non réalisé, à valider sur les VM** : connexion réelle à ASE (pyodbc + FreeTDS, TDS 5.0), pilote `psycopg`, service systemd, validité des deux requêtes ASE sur une vraie instance (les trois points listés dans `sql/ase/supervision.sql`), et les scénarios d'acceptation 1 à 3.
+**Non réalisé, à valider sur les VM** : connexion réelle à ASE (pyodbc + FreeTDS, TDS 5.0), pilote `psycopg`, service systemd, exécution de la requête ASE par le scrutateur sur une vraie instance (la requête elle-même a été essayée sous `isql` par l'équipe ; restent les quatre points à valider listés dans `sql/ase/supervision.sql`, dont le sens de `execution_time` et l'effet du filtre `uid > 1`), et les scénarios d'acceptation 1 à 3.

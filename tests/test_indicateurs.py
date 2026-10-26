@@ -1,77 +1,73 @@
 import unittest
 
 from scrutateur.indicateurs import calculer_indicateurs
-from scrutateur.modeles import Lecture, LigneProcessus, LigneTransaction
+from scrutateur.modeles import Lecture, LigneProcessus
 
 
-def p(spid, bloqueur=0, blocage=0, cmd="SELECT", statut="running", login="app"):
-    return LigneProcessus(spid, statut, cmd, login, bloqueur, blocage)
-
-
-def t(spid, age):
-    return LigneTransaction(spid, age)
+def p(spid, bloqueur=0, blocage=None, exe=None, cmd="SELECT", statut="running", login="app"):
+    """Une ligne du tableau : blocage = time_blocked, exe = execution_time (None = NULL dans ASE)."""
+    return LigneProcessus(spid, statut, cmd, login, bloqueur, blocage, exe)
 
 
 class TestIndicateurs(unittest.TestCase):
     def test_instance_calme_donne_zero_et_pas_none(self):
-        r = calculer_indicateurs(Lecture([p(10), p(11)], []))
+        # Processus connectes mais sans requete en cours ni blocage : tous les indicateurs valent 0
+        r = calculer_indicateurs(Lecture([p(10, statut="sleeping"), p(11, statut="sleeping")]))
         self.assertEqual((r.nb_bloques, r.blocage_max_s, r.blocage_moyen_s), (0, 0.0, 0.0))
-        self.assertEqual((r.nb_transactions, r.transaction_max_s, r.transaction_moyenne_s), (0, 0.0, 0.0))
-        self.assertEqual(r.details, [])
+        self.assertEqual((r.nb_requetes, r.requete_max_s, r.requete_moyenne_s), (0, 0.0, 0.0))
 
     def test_lecture_totalement_vide(self):
-        r = calculer_indicateurs(Lecture([], []))
-        self.assertEqual((r.nb_bloques, r.nb_transactions), (0, 0))
+        r = calculer_indicateurs(Lecture([]))
+        self.assertEqual((r.nb_bloques, r.nb_requetes, r.details), (0, 0, []))
 
     def test_blocage_max_et_moyenne_sur_les_seuls_bloques(self):
         # 3 processus dont 2 bloques (40 s et 20 s) : la moyenne ignore le processus non bloque
-        r = calculer_indicateurs(Lecture([p(10), p(11, bloqueur=10, blocage=40), p(12, bloqueur=10, blocage=20)], []))
+        r = calculer_indicateurs(Lecture([p(10, exe=5), p(11, 10, 40, 60), p(12, 10, 20, 30)]))
         self.assertEqual(r.nb_bloques, 2)
         self.assertEqual(r.blocage_max_s, 40.0)
         self.assertEqual(r.blocage_moyen_s, 30.0)
 
-    def test_bloqueur_identifiable_dans_le_detail(self):
-        r = calculer_indicateurs(Lecture([p(10), p(11, bloqueur=10, blocage=40)], [t(10, 90)]))
+    def test_requete_max_et_moyenne(self):
+        r = calculer_indicateurs(Lecture([p(10, exe=10), p(11, exe=30), p(12, exe=80)]))
+        self.assertEqual(r.nb_requetes, 3)
+        self.assertEqual(r.requete_max_s, 80.0)
+        self.assertEqual(r.requete_moyenne_s, 40.0)
+
+    def test_les_processus_bloques_comptent_parmi_les_requetes_en_cours(self):
+        r = calculer_indicateurs(Lecture([p(10, exe=10), p(11, 10, 40, 100)]))
+        self.assertEqual((r.nb_requetes, r.requete_max_s), (2, 100.0))
+        self.assertEqual(r.blocage_max_s, 40.0)
+
+    def test_bloqueur_inactif_est_liste_mais_ne_compte_dans_aucune_moyenne(self):
+        # spid 10 : en attente de commande, donc execution_time NULL ; il bloque le spid 11
+        r = calculer_indicateurs(Lecture([p(10, cmd="AWAITING COMMAND", statut="sleeping"), p(11, 10, 40, 40)]))
+        self.assertEqual([d.spid for d in r.details], [10, 11])
         par_spid = {d.spid: d for d in r.details}
-        self.assertEqual(par_spid[11].bloqueur_spid, 10)
-        self.assertEqual(par_spid[11].blocage_s, 40)
-        self.assertEqual(par_spid[10].transaction_s, 90)  # le bloqueur a une transaction ouverte
-        self.assertIsNone(par_spid[10].bloqueur_spid)
+        self.assertEqual(par_spid[11].bloqueur_spid, 10)  # le bloqueur est identifiable
+        self.assertEqual((r.nb_bloques, r.nb_requetes), (1, 1))
+        self.assertEqual(r.requete_moyenne_s, 40.0)
 
-    def test_duree_de_transaction_independante_de_la_commande(self):
-        # Commande lancee il y a 1 s, mais transaction ouverte depuis 600 s : c'est l'age de la transaction qui compte
-        r = calculer_indicateurs(Lecture([p(10, cmd="AWAITING COMMAND", statut="sleeping")], [t(10, 600)]))
-        self.assertEqual(r.transaction_max_s, 600.0)
-        self.assertEqual(r.nb_transactions, 1)
-
-    def test_transactions_max_et_moyenne(self):
-        r = calculer_indicateurs(Lecture([p(10), p(11), p(12)], [t(10, 10), t(11, 30), t(12, 80)]))
-        self.assertEqual(r.transaction_max_s, 80.0)
-        self.assertEqual(r.transaction_moyenne_s, 40.0)
-
-    def test_plusieurs_transactions_pour_un_processus_gardent_la_plus_ancienne(self):
-        r = calculer_indicateurs(Lecture([p(10)], [t(10, 5), t(10, 50)]))
-        self.assertEqual(r.nb_transactions, 1)
-        self.assertEqual(r.transaction_max_s, 50.0)
-
-    def test_transaction_d_un_processus_inconnu_est_ignoree(self):
-        # spid 99 : tache systeme ou connexion du scrutateur, deja exclue de la liste des processus
-        r = calculer_indicateurs(Lecture([p(10)], [t(99, 7200)]))
-        self.assertEqual((r.nb_transactions, r.transaction_max_s), (0, 0.0))
+    def test_blocage_se_fonde_sur_blocked_pas_sur_time_blocked_seul(self):
+        # time_blocked renseigne mais blocked = 0 : valeur residuelle, le processus n'est pas bloque
+        r = calculer_indicateurs(Lecture([p(10, bloqueur=0, blocage=99, exe=3)]))
+        self.assertEqual((r.nb_bloques, r.blocage_max_s), (0, 0.0))
 
     def test_valeurs_nulles_ou_negatives_ne_cassent_rien(self):
-        r = calculer_indicateurs(Lecture([p(10, bloqueur=5, blocage=None), p(11)], [t(11, -3)]))
-        self.assertEqual(r.nb_bloques, 1)
-        self.assertEqual(r.blocage_max_s, 0.0)
-        self.assertEqual(r.transaction_max_s, 0.0)
+        r = calculer_indicateurs(Lecture([p(10, bloqueur=5, blocage=None, exe=-3), p(11, exe=None)]))
+        self.assertEqual((r.nb_bloques, r.blocage_max_s), (1, 0.0))
+        self.assertEqual((r.nb_requetes, r.requete_max_s), (1, 0.0))
 
-    def test_processus_bloque_et_en_transaction_n_apparait_qu_une_fois(self):
-        r = calculer_indicateurs(Lecture([p(11, bloqueur=10, blocage=40)], [t(11, 100)]))
-        self.assertEqual([d.spid for d in r.details], [11])
-        self.assertEqual((r.details[0].blocage_s, r.details[0].transaction_s), (40, 100))
+    def test_un_spid_en_double_n_apparait_qu_une_fois(self):
+        r = calculer_indicateurs(Lecture([p(10, exe=5), p(10, exe=50)]))
+        self.assertEqual([d.spid for d in r.details], [10])
+        self.assertEqual(r.requete_max_s, 50.0)
+
+    def test_details_tries_par_spid_et_complets(self):
+        r = calculer_indicateurs(Lecture([p(30, exe=1), p(10, exe=2), p(20, exe=3)]))
+        self.assertEqual([d.spid for d in r.details], [10, 20, 30])
 
     def test_moyenne_arrondie_a_une_decimale(self):
-        r = calculer_indicateurs(Lecture([p(1, 9, 1), p(2, 9, 1), p(3, 9, 2)], []))
+        r = calculer_indicateurs(Lecture([p(1, 9, 1), p(2, 9, 1), p(3, 9, 2)]))
         self.assertEqual(r.blocage_moyen_s, 1.3)
 
 

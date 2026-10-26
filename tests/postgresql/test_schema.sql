@@ -22,11 +22,13 @@ INSERT INTO meteo.instance (nom, login, password, actif) VALUES
     ('t_vide', 'u', 'p', true), ('t_erreur', 'u', 'p', true), ('t_perime', 'u', 'p', true),
     ('t_inactif', 'u', 'p', false);
 
--- Releves : (instance, statut, erreur, duree, nb_bloques, bmax, bmoy, nb_tr, tmax, tmoy, processus)
+-- Releves : (instance, statut, erreur, duree, nb_bloques, bmax, bmoy, nb_req, rmax, rmoy, processus)
 SELECT meteo.enregistrer_mesure(pg_temp.id('t_ok'),    'ok', NULL, 120, 0, 0, 0, 0, 0, 0);
-SELECT meteo.enregistrer_mesure(pg_temp.id('t_nuage'), 'ok', NULL, 130, 1, 45, 45, 2, 100, 80,
-    '[{"spid":12,"statut":"lock sleep","cmd":"UPDATE","login":"app","bloqueur_spid":9,"blocage_s":45,"transaction_s":100},
-      {"spid":9,"statut":"sleeping","cmd":"AWAITING COMMAND","login":"app","bloqueur_spid":null,"blocage_s":null,"transaction_s":60}]'::jsonb);
+SELECT meteo.enregistrer_mesure(pg_temp.id('t_nuage'), 'ok', NULL, 130, 1, 45, 45, 2, 40, 22.5,
+    '[{"spid":12,"uid":7,"login":"app","statut":"lock sleep","hostname":"srv2","programme":"appli","hostprocess":"99",
+       "cmd":"UPDATE","bloqueur_spid":9,"blocage_s":45,"execution_s":40},
+      {"spid":9,"uid":7,"login":"app","statut":"sleeping","hostname":"srv2","programme":"appli","hostprocess":"98",
+       "cmd":"AWAITING COMMAND","bloqueur_spid":null,"blocage_s":null,"execution_s":null}]'::jsonb);
 SELECT meteo.enregistrer_mesure(pg_temp.id('t_orage'), 'ok', NULL, 140, 3, 200, 90, 1, 1000, 1000, '[]'::jsonb);
 SELECT meteo.enregistrer_mesure(pg_temp.id('t_erreur'),'erreur', 'connexion refusee', 10, NULL, NULL, NULL, NULL, NULL, NULL);
 SELECT meteo.enregistrer_mesure(pg_temp.id('t_perime'),'ok', NULL, 100, 0, 0, 0, 0, 0, 0);
@@ -48,13 +50,14 @@ SELECT pg_temp.verifie(
 -- Niveau par indicateur et bornes exactes (valeur = warning -> nuage ; valeur = alarme -> orage)
 SELECT pg_temp.verifie(pg_temp.niveau_ind('t_nuage', 'blocage_max')    = 'nuage',  '45 s >= warning 30 : nuage');
 SELECT pg_temp.verifie(pg_temp.niveau_ind('t_nuage', 'blocage_moyen')  = 'nuage',  '45 s >= warning 10 : nuage');
-SELECT pg_temp.verifie(pg_temp.niveau_ind('t_nuage', 'transaction_max') = 'soleil', '100 s < warning 300 : soleil');
-SELECT meteo.enregistrer_mesure(pg_temp.id('t_ok'), 'ok', NULL, 1, 1, 30, 30, 1, 300, 300);
-SELECT pg_temp.verifie(pg_temp.niveau_ind('t_ok', 'blocage_max')     = 'nuage', 'valeur = warning : nuage');
-SELECT pg_temp.verifie(pg_temp.niveau_ind('t_ok', 'transaction_max') = 'nuage', 'valeur = warning : nuage (transactions)');
-SELECT meteo.enregistrer_mesure(pg_temp.id('t_ok'), 'ok', NULL, 1, 1, 120, 60, 1, 900, 300);
-SELECT pg_temp.verifie(pg_temp.niveau_ind('t_ok', 'blocage_max')     = 'orage', 'valeur = alarme : orage');
-SELECT pg_temp.verifie(pg_temp.niveau_ind('t_ok', 'transaction_moyenne') = 'orage', 'valeur = alarme : orage (moyenne)');
+SELECT pg_temp.verifie(pg_temp.niveau_ind('t_nuage', 'requete_max') = 'soleil', '40 s < warning 60 : soleil');
+SELECT pg_temp.verifie(pg_temp.niveau_ind('t_nuage', 'requete_moyenne') = 'nuage', '22,5 s >= warning 10 : nuage');
+SELECT meteo.enregistrer_mesure(pg_temp.id('t_ok'), 'ok', NULL, 1, 1, 30, 30, 1, 60, 10);
+SELECT pg_temp.verifie(pg_temp.niveau_ind('t_ok', 'blocage_max') = 'nuage', 'valeur = warning : nuage');
+SELECT pg_temp.verifie(pg_temp.niveau_ind('t_ok', 'requete_max') = 'nuage', 'valeur = warning : nuage (requetes)');
+SELECT meteo.enregistrer_mesure(pg_temp.id('t_ok'), 'ok', NULL, 1, 1, 120, 60, 1, 300, 60);
+SELECT pg_temp.verifie(pg_temp.niveau_ind('t_ok', 'blocage_max') = 'orage', 'valeur = alarme : orage');
+SELECT pg_temp.verifie(pg_temp.niveau_ind('t_ok', 'requete_moyenne') = 'orage', 'valeur = alarme : orage (moyenne)');
 SELECT meteo.enregistrer_mesure(pg_temp.id('t_ok'), 'ok', NULL, 1, 0, 0, 0, 0, 0, 0);   -- retour a la normale
 SELECT pg_temp.verifie(pg_temp.niveau('t_ok') = 'soleil', 'retour a la normale apres un nouveau releve valide');
 
@@ -65,8 +68,8 @@ SELECT pg_temp.verifie(pg_temp.niveau_ind('t_orage', 'blocage_max') = 'orage', '
 DELETE FROM meteo.seuil WHERE instance_id = pg_temp.id('t_nuage');
 
 -- Ordre de gravite : orage > inconnu > nuage > soleil
-DELETE FROM meteo.seuil WHERE instance_id IS NULL AND indicateur = 'transaction_max';
-SELECT pg_temp.verifie(pg_temp.niveau_ind('t_nuage', 'transaction_max') = 'inconnu', 'seuil absent : inconnu');
+DELETE FROM meteo.seuil WHERE instance_id IS NULL AND indicateur = 'requete_max';
+SELECT pg_temp.verifie(pg_temp.niveau_ind('t_nuage', 'requete_max') = 'inconnu', 'seuil absent : inconnu');
 SELECT pg_temp.verifie(pg_temp.niveau('t_nuage') = 'inconnu', 'nuage + inconnu : inconnu');
 SELECT pg_temp.verifie(pg_temp.niveau('t_orage') = 'orage',   'orage + inconnu : orage (alarme connue prioritaire)');
 SELECT pg_temp.verifie(pg_temp.niveau('t_ok')    = 'inconnu', 'soleil + inconnu : inconnu, jamais soleil');
@@ -93,6 +96,12 @@ SELECT pg_temp.verifie((SELECT count(*) FROM meteo.processus p JOIN meteo.mesure
                         WHERE m.instance_id = pg_temp.id('t_nuage')) = 2, '2 processus conserves pour t_nuage');
 SELECT pg_temp.verifie((SELECT bloqueur_spid FROM meteo.processus p JOIN meteo.mesure m USING (mesure_id)
                         WHERE m.instance_id = pg_temp.id('t_nuage') AND spid = 12) = 9, 'le bloqueur (spid 9) est identifiable');
+SELECT pg_temp.verifie((SELECT (execution_s, hostname, programme, uid) = (40, 'srv2', 'appli', 7)
+                        FROM meteo.processus p JOIN meteo.mesure m USING (mesure_id)
+                        WHERE m.instance_id = pg_temp.id('t_nuage') AND spid = 12), 'colonnes du tableau ASE conservees');
+SELECT pg_temp.verifie((SELECT execution_s IS NULL AND blocage_s IS NULL AND bloqueur_spid IS NULL
+                        FROM meteo.processus p JOIN meteo.mesure m USING (mesure_id)
+                        WHERE m.instance_id = pg_temp.id('t_nuage') AND spid = 9), 'bloqueur inactif : durees NULL');
 SELECT pg_temp.verifie((SELECT count(*) FROM meteo.processus p JOIN meteo.mesure m USING (mesure_id)
                         WHERE m.instance_id = pg_temp.id('t_erreur')) = 0, 'pas de processus pour un releve en erreur');
 

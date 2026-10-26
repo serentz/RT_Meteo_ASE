@@ -35,19 +35,23 @@ def parametres_enregistrement(mesure: Mesure) -> tuple[Any, ...]:
         details = [
             {
                 "spid": d.spid,
-                "statut": d.statut,
-                "cmd": d.cmd,
+                "uid": d.uid,
                 "login": d.login,
-                "bloqueur_spid": d.bloqueur_spid,
-                "blocage_s": d.blocage_s,
-                "transaction_s": d.transaction_s,
+                "statut": d.statut,
+                "hostname": d.hostname,
+                "programme": d.programme,
+                "hostprocess": d.hostprocess,
+                "cmd": d.cmd,
+                "bloqueur_spid": d.bloqueur_spid or None,  # NULL : pas bloque
+                "blocage_s": d.blocage_s if d.bloqueur_spid else None,
+                "execution_s": d.execution_s,
             }
             for d in ind.details
         ]
         return (
             mesure.instance_id, "ok", None, mesure.duree_ms,
             ind.nb_bloques, ind.blocage_max_s, ind.blocage_moyen_s,
-            ind.nb_transactions, ind.transaction_max_s, ind.transaction_moyenne_s,
+            ind.nb_requetes, ind.requete_max_s, ind.requete_moyenne_s,
             json.dumps(details),
         )
     return (

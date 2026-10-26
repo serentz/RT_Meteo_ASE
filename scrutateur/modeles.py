@@ -23,54 +23,39 @@ class Instance:
 
 @dataclass(frozen=True)
 class LigneProcessus:
-    """Un processus utilisateur tel que lu dans master..sysprocesses."""
+    """Une ligne du tableau lu dans master..sysprocesses (voir sql/ase/supervision.sql)."""
 
     spid: int
     statut: str | None
     cmd: str | None
     login: str | None
-    bloqueur_spid: int  # 0 : pas bloque
-    blocage_s: int  # secondes, 0 si pas bloque
-
-
-@dataclass(frozen=True)
-class LigneTransaction:
-    """Une transaction ouverte lue dans master..systransactions."""
-
-    spid: int
-    age_s: int
+    bloqueur_spid: int  # blocked : 0 si le processus n'est pas bloque
+    blocage_s: int | None = None  # time_blocked, en secondes ; None si pas bloque
+    execution_s: int | None = None  # execution_time, en secondes ; None si aucune requete en cours
+    uid: int | None = None
+    hostname: str | None = None
+    programme: str | None = None  # program_name
+    hostprocess: str | None = None
 
 
 @dataclass(frozen=True)
 class Lecture:
-    """Resultat brut d'une interrogation d'ASE."""
+    """Resultat brut d'une interrogation d'ASE : le tableau des processus, tel quel."""
 
     processus: list[LigneProcessus]
-    transactions: list[LigneTransaction]
-
-
-@dataclass(frozen=True)
-class DetailProcessus:
-    """Processus conserve en base : bloque et/ou dans une transaction ouverte."""
-
-    spid: int
-    statut: str | None
-    cmd: str | None
-    login: str | None
-    bloqueur_spid: int | None
-    blocage_s: int | None
-    transaction_s: int | None
 
 
 @dataclass(frozen=True)
 class Indicateurs:
+    """Indicateurs calcules sur le tableau en memoire, et ce tableau (un processus par ligne, par spid)."""
+
     nb_bloques: int
     blocage_max_s: float
     blocage_moyen_s: float
-    nb_transactions: int
-    transaction_max_s: float
-    transaction_moyenne_s: float
-    details: list[DetailProcessus]
+    nb_requetes: int
+    requete_max_s: float
+    requete_moyenne_s: float
+    details: list[LigneProcessus]
 
 
 @dataclass(frozen=True)

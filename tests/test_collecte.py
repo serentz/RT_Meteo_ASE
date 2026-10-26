@@ -1,19 +1,19 @@
 import unittest
 
 from scrutateur.collecte import collecter_et_enregistrer, message_erreur
-from scrutateur.modeles import Lecture, LigneProcessus, LigneTransaction
+from scrutateur.modeles import Lecture, LigneProcessus
 from tests.fakes import FauxDepot, instance, lecture_vide
 
 
 class TestCollecte(unittest.TestCase):
     def test_releve_reussi_est_enregistre_en_ok(self):
         depot = FauxDepot()
-        lecture = Lecture([LigneProcessus(11, "lock sleep", "UPDATE", "app", 10, 45)], [LigneTransaction(11, 120)])
+        lecture = Lecture([LigneProcessus(11, "lock sleep", "UPDATE", "app", 10, 45, 120)])
         m = collecter_et_enregistrer(instance(1), lambda i: lecture, depot)
         self.assertEqual(m.statut, "ok")
         self.assertEqual(depot.ecrites, [m])
         self.assertEqual(m.indicateurs.blocage_max_s, 45.0)
-        self.assertEqual(m.indicateurs.transaction_max_s, 120.0)
+        self.assertEqual(m.indicateurs.requete_max_s, 120.0)
 
     def test_panne_ase_devient_une_mesure_erreur_sans_exception(self):
         depot = FauxDepot()

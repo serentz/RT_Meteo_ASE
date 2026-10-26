@@ -31,17 +31,21 @@ Intervalle : 60 secondes (`SCRUTATEUR_INTERVALLE_S`), cadence fixe sans dérive.
 
 `host` et `port` s'ajoutent aux trois champs demandés (nom, login, mot de passe), car le scrutateur étant distant il doit savoir où se connecter.
 
-**Parallélisme.** Chaque instance est relevée dans son propre thread (16 au maximum, `SCRUTATEUR_MAX_PARALLELE`). La panne ou la lenteur d'une instance ne retarde pas les autres. Si le relevé précédent d'une instance n'est pas terminé, elle est sautée au lieu d'empiler des relevés. Les délais de connexion (10 s) et de requête (15 s) bornent la durée d'un relevé à 40 s.
+**Parallélisme.** Chaque instance est relevée dans son propre thread (16 au maximum, `SCRUTATEUR_MAX_PARALLELE`). La panne ou la lenteur d'une instance ne retarde pas les autres. Si le relevé précédent d'une instance n'est pas terminé, elle est sautée au lieu d'empiler des relevés. Les délais de connexion (10 s) et de requête (15 s) bornent la durée d'un relevé à 25 s.
 
 **Unité de travail.** `collecter_et_enregistrer(instance, source, depot)` (module `scrutateur/collecte.py`) relève une instance et met à jour PostgreSQL ; elle ne lève jamais d'exception. Un échec devient une mesure `erreur`. L'écriture se fait par un seul appel à la fonction SQL `meteo.enregistrer_mesure(...)`.
 
-**Sources ASE** (vérifiées dans la documentation SAP, requêtes dans `sql/ase/supervision.sql`) :
+**Source ASE : une seule requête** sur `master..sysprocesses` (texte dans `sql/ase/supervision.sql`). Elle rend un tableau, lu en mémoire par le scrutateur ; c'est de ce tableau que sont calculés tous les indicateurs et que vient le détail des processus. Colonnes :
 
-- `master..sysprocesses.blocked` : spid du bloqueur, 0 si aucun ; `time_blocked` : durée du blocage **en secondes**.
-- `master..systransactions.starttime` : début de chaque transaction ouverte. `sysprocesses` ne donne que le nom de la transaction, jamais sa date de début, d'où cette seconde source.
-- Sont exclus : la connexion du scrutateur (`@@spid`) et les tâches système (`suid > 0`, hypothèse à valider sur l'instance réelle).
+- `blocked` : spid du bloqueur, 0 si le processus n'est pas bloqué ; `time_blocked` : durée du blocage **en secondes**.
+- `execution_time` : durée de la requête en cours **en secondes**.
+- l'identité du processus : `spid`, `uid`, login (`suser_name(suid)`), `status`, `hostname`, `program_name`, `hostprocess`, `cmd`.
 
-**Limites assumées.** La durée de la requête en cours n'est pas collectée : elle n'est pas disponible sans activer les tables de monitoring (MDA). Seule la durée de la transaction ouverte est retenue, qui est l'indicateur utile pour les verrous.
+Lignes retenues : requête en cours, ou bloqué, ou **bloqueur** d'un autre processus (un bloqueur est souvent inactif ; sans cette clause il ne figurerait pas dans le tableau et resterait anonyme). Sont exclus : la connexion du scrutateur (`@@spid`) et les processus dont `uid <= 1`.
+
+**Réserves.** La requête a été validée sous `isql` par l'équipe sur une instance réelle, mais `execution_time` ne figure pas dans la page de documentation SAP de `sysprocesses` consultée : son sens (secondes de la requête en cours) est celui indiqué par l'équipe, à confirmer avec une requête longue (`WAITFOR DELAY`). Le filtre `uid > 1` écarte aussi toute session dont l'utilisateur, dans sa base courante, est `dbo` (uid 1) : à vérifier que les sessions applicatives attendues sont bien listées (points à valider dans `sql/ase/supervision.sql`).
+
+**Limites assumées.** Les transactions ouvertes ne sont plus mesurées. Une session inactive qui garde une transaction ouverte n'apparaît dans le tableau que si elle bloque un autre processus.
 
 **Sécurité.** Les identifiants ASE sont en clair dans `meteo.instance` (choix du POC). Seul le rôle `scrutateur` les lit ; `grafana_ro` n'a aucun droit sur les colonnes `login` et `password`. Utiliser un login ASE dédié, en lecture seule. Le mot de passe PostgreSQL du scrutateur est dans `/etc/scrutateur/scrutateur.env` (mode 0640, hors Git). Les mots de passe ne figurent jamais dans les journaux ni dans les messages d'erreur stockés.
 
@@ -49,12 +53,12 @@ Intervalle : 60 secondes (`SCRUTATEUR_INTERVALLE_S`), cadence fixe sans dérive.
 
 | Indicateur (`code`) | Définition | Unité |
 |---|---|---|
-| Temps max blocage (`blocage_max`) | Maximum des durées de blocage des processus actuellement bloqués | secondes |
+| Temps max blocage (`blocage_max`) | Maximum de `time_blocked` des processus actuellement bloqués (`blocked <> 0`) | secondes |
 | Temps moyen blocage (`blocage_moyen`) | Moyenne sur les seuls processus actuellement bloqués | secondes |
-| Temps max transactions (`transaction_max`) | Maximum de l'âge des transactions ouvertes | secondes |
-| Temps moyen transactions (`transaction_moyenne`) | Moyenne de l'âge des transactions ouvertes | secondes |
+| Temps max requêtes (`requete_max`) | Maximum de `execution_time` des processus ayant une requête en cours (bloqués compris) | secondes |
+| Temps moyen requêtes (`requete_moyenne`) | Moyenne sur ces mêmes processus | secondes |
 
-Un relevé réussi sans blocage ni transaction donne zéro. Une mesure indisponible donne NULL et l'état « inconnu ». L'âge d'une transaction est indépendant de la durée de la dernière commande. Les processus bloqués ou en transaction sont conservés dans `meteo.processus` (spid, commande, statut, login, bloqueur, durées) : le bloqueur est identifiable.
+Un relevé réussi sans blocage ni requête en cours donne zéro. Une mesure indisponible donne NULL et l'état « inconnu ». Le tableau lu est conservé tel quel dans `meteo.processus` à chaque relevé : requêtes actives, processus bloqués et bloqueurs, avec hôte, programme, login, commande, bloqueur et durées. Le bloqueur est identifiable même s'il est inactif.
 
 ## Seuils et écrans
 
@@ -66,8 +70,8 @@ Valeurs initiales **provisoires** (secondes), à ajuster selon la charge :
 |---|---|---|
 | blocage max | 30 | 120 |
 | blocage moyen | 10 | 60 |
-| transaction max | 300 | 900 |
-| transaction moyenne | 60 | 300 |
+| requête max | 60 | 300 |
+| requête moyenne | 10 | 60 |
 
 Les vues `meteo.etat_indicateur` (une ligne par instance et par indicateur : valeur, seuils, niveau) et `meteo.etat_instance` (une ligne par instance : pire niveau) alimentent l'affichage. Le niveau est `soleil`, `nuage`, `orage` ou `inconnu`.
 
@@ -81,7 +85,7 @@ Vue globale : une tuile cliquable par instance, avec son icône. Vue détail : u
 
 1. Instance sans anomalie : soleil et quatre valeurs valides.
 2. Blocage contrôlé : nuage puis orage aux seuils, avec bloqueur identifiable dans `meteo.processus`.
-3. Transaction longue : durée indépendante de la durée de la dernière commande.
+3. Requête longue : sa durée (`execution_time`) apparaît dans le détail et dans les indicateurs requête max et moyenne, cohérente avec la durée lue sous `isql`.
 4. Instance injoignable, login refusé ou PostgreSQL indisponible : aucun faux soleil ; retour à la normale après reprise et relevé valide.
 5. Parallélisme : une instance lente ou en panne ne retarde pas le relevé des autres.
 6. Instance ajoutée ou désactivée dans `meteo.instance` : prise en compte sans redémarrage.

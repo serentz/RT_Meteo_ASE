@@ -35,9 +35,9 @@ def collecter_et_enregistrer(
         indicateurs = calculer_indicateurs(source(instance))
         mesure = Mesure(instance.instance_id, "ok", _duree_ms(debut, horloge), indicateurs=indicateurs)
         journal.debug(
-            "%s : %d bloque(s) (max %.0f s), %d transaction(s) (max %.0f s)",
+            "%s : %d bloque(s) (max %.0f s), %d requete(s) en cours (max %.0f s)",
             instance.nom, indicateurs.nb_bloques, indicateurs.blocage_max_s,
-            indicateurs.nb_transactions, indicateurs.transaction_max_s,
+            indicateurs.nb_requetes, indicateurs.requete_max_s,
         )
     except Exception as exc:  # noqa: BLE001 - toute panne de l'instance devient une mesure 'erreur'
         message = message_erreur(exc, instance)

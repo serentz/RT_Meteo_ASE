@@ -38,4 +38,4 @@ class FauxDepot:
 
 
 def lecture_vide() -> Lecture:
-    return Lecture(processus=[], transactions=[])
+    return Lecture(processus=[])

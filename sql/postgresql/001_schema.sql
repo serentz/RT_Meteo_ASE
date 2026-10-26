@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS meteo.instance (
 );
 
 -- --- Mesures : une ligne par instance et par releve --------------------------------------
--- statut 'ok'     : releve reussi ; aucun blocage / aucune transaction donne 0 (pas NULL).
+-- statut 'ok'     : releve reussi ; aucun blocage / aucune requete en cours donne 0 (pas NULL).
 -- statut 'erreur' : instance injoignable, login refuse, requete en echec... ; mesures a NULL.
 CREATE TABLE IF NOT EXISTS meteo.mesure (
     mesure_id             bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -35,31 +35,36 @@ CREATE TABLE IF NOT EXISTS meteo.mesure (
     nb_bloques            integer,
     blocage_max_s         numeric,
     blocage_moyen_s       numeric,
-    nb_transactions       integer,
-    transaction_max_s     numeric,
-    transaction_moyenne_s numeric,
+    nb_requetes           integer,
+    requete_max_s         numeric,
+    requete_moyenne_s     numeric,
     CONSTRAINT mesure_coherente CHECK (
         (statut = 'ok' AND erreur IS NULL
             AND nb_bloques IS NOT NULL AND blocage_max_s IS NOT NULL AND blocage_moyen_s IS NOT NULL
-            AND nb_transactions IS NOT NULL AND transaction_max_s IS NOT NULL AND transaction_moyenne_s IS NOT NULL)
+            AND nb_requetes IS NOT NULL AND requete_max_s IS NOT NULL AND requete_moyenne_s IS NOT NULL)
         OR
         (statut = 'erreur' AND erreur IS NOT NULL
             AND nb_bloques IS NULL AND blocage_max_s IS NULL AND blocage_moyen_s IS NULL
-            AND nb_transactions IS NULL AND transaction_max_s IS NULL AND transaction_moyenne_s IS NULL)
+            AND nb_requetes IS NULL AND requete_max_s IS NULL AND requete_moyenne_s IS NULL)
     )
 );
 CREATE INDEX IF NOT EXISTS mesure_instance_date ON meteo.mesure (instance_id, collecte_le DESC);
 
--- --- Detail : seuls les processus bloques ou en transaction sont conserves ------------------
+-- --- Detail : le tableau lu sur ASE a chaque releve (processus avec requete en cours, bloques, bloqueurs) ---
+-- Volume : une ligne par processus retenu et par releve ; meteo.purger() limite la conservation.
 CREATE TABLE IF NOT EXISTS meteo.processus (
     mesure_id     bigint  NOT NULL REFERENCES meteo.mesure ON DELETE CASCADE,
     spid          integer NOT NULL,
-    statut        text,
-    cmd           text,
+    uid           integer,
     login         text,
+    statut        text,
+    hostname      text,
+    programme     text,             -- program_name
+    hostprocess   text,
+    cmd           text,
     bloqueur_spid integer,          -- NULL : pas bloque
-    blocage_s     integer,          -- NULL : pas bloque
-    transaction_s integer,          -- NULL : pas de transaction ouverte
+    blocage_s     integer,          -- time_blocked ; NULL : pas bloque
+    execution_s   integer,          -- execution_time ; NULL : aucune requete en cours
     PRIMARY KEY (mesure_id, spid)
 );
 
@@ -73,8 +78,8 @@ CREATE TABLE IF NOT EXISTS meteo.indicateur (
 INSERT INTO meteo.indicateur (code, libelle, unite, ordre) VALUES
     ('blocage_max',        'Temps max blocage',        's', 1),
     ('blocage_moyen',      'Temps moyen blocage',      's', 2),
-    ('transaction_max',    'Temps max transactions',   's', 3),
-    ('transaction_moyenne','Temps moyen transactions', 's', 4)
+    ('requete_max',        'Temps max requêtes',       's', 3),
+    ('requete_moyenne',    'Temps moyen requêtes',     's', 4)
 ON CONFLICT (code) DO NOTHING;
 
 -- Seuils : valeur < warning : soleil ; warning <= valeur < alarme : nuage ; valeur >= alarme : orage.
@@ -89,10 +94,10 @@ CREATE TABLE IF NOT EXISTS meteo.seuil (
 );
 -- Valeurs initiales PROVISOIRES (secondes) : a ajuster selon la charge reelle.
 INSERT INTO meteo.seuil (instance_id, indicateur, warning, alarme) VALUES
-    (NULL, 'blocage_max',         30, 120),
-    (NULL, 'blocage_moyen',       10,  60),
-    (NULL, 'transaction_max',    300, 900),
-    (NULL, 'transaction_moyenne', 60, 300)
+    (NULL, 'blocage_max',     30, 120),
+    (NULL, 'blocage_moyen',   10,  60),
+    (NULL, 'requete_max',     60, 300),
+    (NULL, 'requete_moyenne', 10,  60)
 ON CONFLICT (instance_id, indicateur) DO NOTHING;
 
 -- Parametres. peremption_s : au-dela, un releve est considere perime (3 cycles de 60 s).
@@ -106,7 +111,8 @@ ON CONFLICT (cle) DO NOTHING;
 -- --- Fonction d'ecriture appelee par le scrutateur -----------------------------------------------
 -- Un seul appel par instance et par cycle. SECURITY DEFINER : le role scrutateur n'a besoin que de
 -- EXECUTE sur cette fonction (il n'a aucun droit direct d'ecriture sur les tables).
--- p_processus : tableau JSON d'objets {spid, statut, cmd, login, bloqueur_spid, blocage_s, transaction_s}.
+-- p_processus : tableau JSON d'objets {spid, uid, login, statut, hostname, programme, hostprocess, cmd,
+--               bloqueur_spid, blocage_s, execution_s} (un par ligne du tableau lu sur ASE).
 CREATE OR REPLACE FUNCTION meteo.enregistrer_mesure(
     p_instance_id           integer,
     p_statut                text,
@@ -115,9 +121,9 @@ CREATE OR REPLACE FUNCTION meteo.enregistrer_mesure(
     p_nb_bloques            integer,
     p_blocage_max_s         numeric,
     p_blocage_moyen_s       numeric,
-    p_nb_transactions       integer,
-    p_transaction_max_s     numeric,
-    p_transaction_moyenne_s numeric,
+    p_nb_requetes           integer,
+    p_requete_max_s         numeric,
+    p_requete_moyenne_s     numeric,
     p_processus             jsonb DEFAULT '[]'::jsonb
 ) RETURNS bigint
 LANGUAGE plpgsql
@@ -128,15 +134,17 @@ DECLARE
     v_id bigint;
 BEGIN
     INSERT INTO meteo.mesure (instance_id, duree_ms, statut, erreur, nb_bloques, blocage_max_s,
-                              blocage_moyen_s, nb_transactions, transaction_max_s, transaction_moyenne_s)
+                              blocage_moyen_s, nb_requetes, requete_max_s, requete_moyenne_s)
     VALUES (p_instance_id, p_duree_ms, p_statut, p_erreur, p_nb_bloques, p_blocage_max_s,
-            p_blocage_moyen_s, p_nb_transactions, p_transaction_max_s, p_transaction_moyenne_s)
+            p_blocage_moyen_s, p_nb_requetes, p_requete_max_s, p_requete_moyenne_s)
     RETURNING mesure_id INTO v_id;
 
     IF p_statut = 'ok' AND jsonb_typeof(p_processus) = 'array' THEN
-        INSERT INTO meteo.processus (mesure_id, spid, statut, cmd, login, bloqueur_spid, blocage_s, transaction_s)
-        SELECT v_id, (e->>'spid')::integer, e->>'statut', e->>'cmd', e->>'login',
-               (e->>'bloqueur_spid')::integer, (e->>'blocage_s')::integer, (e->>'transaction_s')::integer
+        INSERT INTO meteo.processus (mesure_id, spid, uid, login, statut, hostname, programme, hostprocess, cmd,
+                                     bloqueur_spid, blocage_s, execution_s)
+        SELECT v_id, (e->>'spid')::integer, (e->>'uid')::integer, e->>'login', e->>'statut', e->>'hostname',
+               e->>'programme', e->>'hostprocess', e->>'cmd',
+               (e->>'bloqueur_spid')::integer, (e->>'blocage_s')::integer, (e->>'execution_s')::integer
         FROM jsonb_array_elements(p_processus) AS e;
     END IF;
     RETURN v_id;
@@ -178,8 +186,8 @@ WITH dm AS (
     CROSS JOIN LATERAL (VALUES
         ('blocage_max',         d.blocage_max_s),
         ('blocage_moyen',       d.blocage_moyen_s),
-        ('transaction_max',     d.transaction_max_s),
-        ('transaction_moyenne', d.transaction_moyenne_s)
+        ('requete_max',         d.requete_max_s),
+        ('requete_moyenne',     d.requete_moyenne_s)
     ) AS v(code, valeur)
     WHERE i.actif
 )
