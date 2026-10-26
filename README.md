@@ -19,6 +19,8 @@ Voir [Installation des VM](docs/installation_vm.md), [Synchronisation Windows/Gi
 ## Organisation
 
 - `infra/hyperv/create_vms.ps1` et `infra/hyperv/templates/` : infrastructure et modèles d'installation.
+- `infra/hyperv/check_vms.ps1` : diagnostic en lecture seule (Hyper-V, réseau de l'hôte, ping, port 22, bannière SSH).
+- `images/iconnes/` : icônes météo (soleil, nuages, orages, lune endormie) pour l'affichage.
 - `agent/` : futur collecteur et service systemd.
 - `sql/ase/` : futures requêtes et prérequis ASE.
 - `sql/postgresql/` : futur schéma et vues de restitution.
@@ -27,4 +29,4 @@ Voir [Installation des VM](docs/installation_vm.md), [Synchronisation Windows/Gi
 
 ## État de validation
 
-Contrôles statiques des modèles et des remplacements effectués. Exécution PowerShell et installation Hyper-V non réalisées dans l'environnement de préparation Linux. Validation Windows et consoles des trois VM indispensable avant de déclarer l'infrastructure opérationnelle.
+Contrôles statiques des scripts, des modèles et des remplacements effectués. Exécution PowerShell et installation Hyper-V non réalisées dans l'environnement de préparation Linux. Le premier essai (hors dépôt) s'est arrêté à l'accès SSH aux VM : lancer `infra/hyperv/check_vms.ps1` puis suivre la section « Dépannage SSH » de [Installation des VM](docs/installation_vm.md). Validation Windows et consoles des trois VM indispensable avant de déclarer l'infrastructure opérationnelle.

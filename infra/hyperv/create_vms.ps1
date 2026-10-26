@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-  Cree le reseau et les 4 VM Hyper-V du POC comparaison_ase, OS installes automatiquement.
+  Cree le reseau et les 3 VM Hyper-V du POC RT_Meteo_ASE, OS installes automatiquement.
 
 .DESCRIPTION
   - commutateur interne + NAT (192.168.50.0/24, passerelle .1 = le PC hote) ;
-  - 4 VM generation 2 : pg01 et bastion (Ubuntu Server, autoinstall), ase01 (CentOS Stream, kickstart) ;
+  - 3 VM generation 2 : pg01 et bastion (Ubuntu Server, autoinstall), ase01 (CentOS Stream, kickstart) ;
   - chaque VM recoit un petit disque "graine" (CIDATA / OEMDRV) avec sa configuration : IP fixe, nom,
     utilisateur, SSH, disque entier, /etc/hosts ;
   - le script attend la fin des installations (les VM s'eteignent seules), retire ISO et disques graines,
@@ -46,11 +46,11 @@ ATTENTION
 
 .EXAMPLE
   .\create_vms.ps1 -UbuntuIso "K:\ShareLinux\Image ISO\ubuntu-24.04.5-live-server-amd64.iso" -CentosIso "K:\ShareLinux\Image ISO\CentOS-Stream-9-20260316.0-x86_64-dvd1.iso"
-  Cree le reseau et les 4 VM, puis installe Ubuntu et CentOS sans intervention.
+  Cree le reseau et les 3 VM, puis installe Ubuntu et CentOS sans intervention.
 
 .EXAMPLE
   .\create_vms.ps1 -Destroy
-  Supprime les 4 VM et leurs disques (le reseau est conserve).
+  Supprime les 3 VM, leurs disques et le reseau cree par le script (commutateur, carte vEthernet, NAT). Avec -Only, le reseau est conserve.
 #>
 [CmdletBinding()]
 param(
@@ -59,13 +59,13 @@ param(
     [string]$VmRoot     = 'I:\POC\HyperV',
     [string]$SwitchName = 'compa-net',
     [string]$Subnet     = '192.168.50',       # trois premiers octets, masque /24
-    [string]$AdminUser  = 'admin01',          # utilisateur cree sur les 4 VM
+    [string]$AdminUser  = 'admin01',          # utilisateur cree sur les 3 VM
     [securestring]$AdminPassword,             # sinon demande a la saisie
     [string]$SshPublicKeyFile,                # defaut : ~\.ssh\id_ed25519.pub ou id_rsa.pub s'ils existent
     [string]$Keyboard   = 'fr',
     [int]$InstallTimeoutMin = 60,
     [string[]]$Only,                          # ne traiter que ces VM, ex. -Only ase01
-    [switch]$Destroy,                         # supprime les VM du POC (et rien d'autre)
+    [switch]$Destroy,                         # supprime les VM du POC et, sans -Only, leur reseau
     [switch]$NoConsole,                       # n'ouvre pas les consoles
     [Alias('h')][switch]$Help                 # affiche l'aide et quitte
 )
@@ -89,7 +89,7 @@ $vms = @(
     @{ Name = 'ase01';   Os = 'centos'; Cpu = 2; MemGB = 4; DiskGB = 40; Ip = 21 }
  )
 
-$allVms = $vms      # /etc/hosts contient toujours les 4 VM
+$allVms = $vms      # /etc/hosts contient toujours les 3 VM
 if ($Only) {
     $unknown = $Only | Where-Object { $allVms.Name -notcontains $_ }
     if ($unknown) { throw "-Only : VM inconnue(s) $($unknown -join ', '). Valeurs possibles : $($allVms.Name -join ', ')" }
@@ -151,7 +151,7 @@ if ($existing) {
 
 # Mot de passe
 if (-not $AdminPassword) {
-    $s1 = Read-Host "Mot de passe de '$AdminUser' sur les 4 VM (8 caracteres min.)" -AsSecureString
+    $s1 = Read-Host "Mot de passe de '$AdminUser' sur les 3 VM (8 caracteres min.)" -AsSecureString
     $s2 = Read-Host "Confirmer le mot de passe" -AsSecureString
     $plain1 = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s1))
     $plain2 = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s2))
@@ -281,7 +281,7 @@ Start-VM -Name $vms.Name
 if (-not $NoConsole) { foreach ($v in $vms) { Start-Process vmconnect.exe -ArgumentList 'localhost', $v.Name } }
 
 Write-Host ""
-Write-Host "Installation en cours dans les 4 VM (10 a 20 minutes, en parallele)."
+Write-Host "Installation en cours dans les 3 VM (10 a 20 minutes, en parallele)."
 Write-Host "  - Ubuntu (bastion, pg01) : si la console demande 'Continue with autoinstall?', taper  yes  puis Entree."
 Write-Host "  - CentOS (ase01)  : si le menu du demarrage attend, choisir 'Install CentOS Stream 9' (Entree)."
 Write-Host "Les VM s'eteignent toutes seules a la fin : ne rien faire d'autre."
@@ -331,4 +331,5 @@ foreach ($v in ($vms | Sort-Object { $_.Ip })) {
     Write-Host ("  {0,-8} {1}.{2,-3} ssh {3}@{1}.{2}   {4}" -f $v.Name, $Subnet, $v.Ip, $AdminUser, $state)
 }
 Write-Host ""
+Write-Host "Verification SSH et reseau : .\infra\hyperv\check_vms.ps1 (lecture seule)."
 Write-Host "Etape suivante : docs/installation_vm.md section 'Suite' (PostgreSQL sur pg01)."

@@ -4,9 +4,9 @@
 
 PC Windows avec Hyper-V disponible et activé, PowerShell administrateur, au moins 12 Go de RAM libres pour les invités en plus de Windows, espace disque suffisant sur I:. Les ISO doivent être les médias complets Ubuntu Server 24.04 LTS et CentOS Stream 9 DVD x86_64, téléchargés auprès de leurs éditeurs et contrôlés par leur somme de contrôle. Les ISO ne sont pas incluses.
 
-Le réseau proposé est 192.168.50.0/24 avec passerelle 192.168.50.1. Vérifier qu'il n'entre pas en conflit avec LAN, VPN ou réseau Hyper-V existant. Le NAT Windows peut nécessiter une adaptation s'il existe déjà un autre réseau NAT sur le poste. Le script ne résout pas automatiquement ces conflits.
+Le réseau est 192.168.50.0/24 avec passerelle 192.168.50.1 (le PC hôte), sur le commutateur interne `compa-net` (nom hérité du projet `comparaison_ase`, modifiable avec `-SwitchName`). Vérifier qu'il n'entre pas en conflit avec LAN, VPN ou réseau Hyper-V existant. Le script réutilise un commutateur, une adresse et un NAT déjà présents mais ne résout aucun conflit. En particulier, un reste d'un essai précédent (commutateur `rt-meteo-ase-net`, ancien NAT, ancien environnement `comparaison_ase` encore démarré) qui utilise la même plage 192.168.50.0/24 fait échouer SSH : voir « Dépannage SSH ».
 
-Les noms `bastion`, `pg01`, `ase01` doivent être libres. Le script refuse de remplacer une VM ou un dossier existant. Ne pas lancer `-Destroy` pour supprimer des VM d'un autre projet.
+Les noms `bastion`, `pg01`, `ase01` doivent être libres : le script s'arrête si une VM de ce nom existe déjà. Il ne contrôle pas l'existence des dossiers. `-Destroy` supprime les VM par leur nom : ne pas le lancer si des VM d'un autre projet portent les mêmes noms.
 
 ## Lancement
 
@@ -21,7 +21,7 @@ Get-Help .\infra\hyperv\create_vms.ps1 -Detailed
   -CentosIso 'K:\ShareLinux\Image ISO\centos-stream9-dvd.iso'
 ```
 
-Le mot de passe est demandé à l'exécution. Ne pas le saisir en clair dans une commande enregistrée. Une clé publique SSH locale est détectée si présente dans le profil utilisateur qui exécute PowerShell. Les VM et disques sont créés dans `I:\POC\HyperV\RT_Meteo_ASE`, hors du répertoire Git.
+Le mot de passe est demandé à l'exécution. Ne pas le saisir en clair dans une commande enregistrée. Une clé publique SSH locale est détectée si présente dans le profil utilisateur qui exécute PowerShell. Les VM et disques sont créés dans `I:\POC\HyperV` (paramètre `-VmRoot`), hors du répertoire Git.
 
 Ce script automatise la configuration et l'installation après démarrage de l'installateur, mais n'édite pas les ISO :
 
@@ -30,11 +30,20 @@ Ce script automatise la configuration et l'installation après démarrage de l'i
 
 Laisser les consoles ouvertes pour suivre l'installation. Un délai dépassé n'autorise aucune suppression automatique. Sur échec, vérifier les consoles ; les graines peuvent contenir le mot de passe en clair et doivent rester dans un dossier accessible uniquement aux administrateurs. Après succès, elles sont détachées puis supprimées.
 
-Le disque système CentOS est explicitement `sda` ; le disque graine est attaché au contrôleur SCSI à l'emplacement 1. Vérifier cette correspondance dans l'installateur avant toute adaptation matérielle. Le modèle efface le disque système de la VM.
+Le disque système CentOS est explicitement `sda` ; le disque graine est attaché au contrôleur SCSI à l'emplacement 1. Vérifier cette correspondance dans l'installateur avant toute adaptation matérielle. Le modèle efface le disque système de la VM. Le pare-feu CentOS ouvre SSH et le port 5000/tcp (ASE) ; le modèle Ubuntu n'active aucun pare-feu.
 
 ## Validation Windows et invités
 
-Le script exige un marqueur écrit en fin d'installation sur chacune des graines, puis retire les ISO et graines, redémarre les invités et attend leur port TCP 22. L'ouverture de ce port ne vérifie ni l'authentification ni l'exécution complète de cloud-init.
+Le script attend l'extinction de chaque VM (fin d'installation), retire les ISO et les graines, redémarre les invités et attend leur port TCP 22. Il n'existe pas de marqueur de succès : une VM éteinte n'est pas la preuve d'une installation réussie, et l'ouverture du port 22 ne vérifie ni l'authentification ni l'exécution complète de cloud-init.
+
+Premier contrôle, en lecture seule, depuis PowerShell sur l'hôte :
+
+```powershell
+.\infra\hyperv\check_vms.ps1
+.\infra\hyperv\check_vms.ps1 -TrySsh   # ajoute un essai ssh sans mot de passe
+```
+
+Il vérifie le commutateur, la passerelle 192.168.50.1 (doublon éventuel), le NAT, l'état des VM, le ping, le port 22 et la bannière SSH de chaque VM. Puis, à la main :
 
 ```powershell
 Get-VM -Name bastion,pg01,ase01 | Select-Object Name,State,MemoryAssigned
@@ -47,16 +56,29 @@ Sur chaque Ubuntu, exécuter `sudo cloud-init status --wait --long`, puis vérif
 
 Le compte est membre de sudo/wheel et utilise son mot de passe pour sudo. Conserver la vérification des clés d'hôte SSH. Une recréation change ces clés : vérifier la nouvelle empreinte en console avant de mettre à jour known_hosts.
 
+## Dépannage SSH
+
+Causes les plus probables quand `ssh admin01@192.168.50.x` ne fonctionne pas, de la plus fréquente à la plus rare :
+
+1. **Doublon de passerelle sur l'hôte.** Un essai précédent a laissé une autre carte `vEthernet (...)` (par exemple `rt-meteo-ase-net`) qui porte déjà 192.168.50.1 et un NAT sur 192.168.50.0/24. Le script voit le NAT existant, ne crée rien, et le trafic part sur la mauvaise carte. `check_vms.ps1` signale ce cas ; sinon : `Get-NetIPAddress -IPAddress 192.168.50.1`, `Get-NetNat`, `Get-VMSwitch`. Retirer ensuite le commutateur et le NAT en trop (`Remove-NetNat`, `Remove-VMSwitch`).
+2. **Ancienne clé d'hôte.** Les VM recréées gardent les mêmes IP mais changent de clés : ssh refuse avec `REMOTE HOST IDENTIFICATION HAS CHANGED`. Vérifier la nouvelle empreinte en console, puis `ssh-keygen -R 192.168.50.10` (idem .11 et .21).
+3. **Une autre VM répond sur la même IP** (ancien environnement `comparaison_ase` ou essai précédent encore démarré) : `Get-VM | Select-Object Name,State` et `Get-VMNetworkAdapter -All | Select-Object VMName,SwitchName,IPAddresses`.
+4. **Installation inachevée.** Le port 22 est fermé tant que l'installateur tourne ou si la VM a redémarré sur l'ISO. Regarder la console de la VM. Sur Ubuntu, `cloud-init status --wait --long` après connexion console.
+5. **Nom de carte.** Le modèle Ubuntu suppose `eth0`. Si la carte porte un autre nom, l'IP statique n'est pas appliquée : en console, `ip -br address` puis `ls /sys/class/net`.
+6. **Authentification.** Le port 22 répond mais `Permission denied` : vérifier le mot de passe saisi (caractères autorisés listés dans le script) et, si une clé publique était détectée, qu'elle est bien celle de l'agent SSH utilisé.
+
+Un port 22 qui répond avec une bannière `SSH-2.0-OpenSSH...` prouve que sshd tourne et que le réseau est correct ; le reste relève de l'authentification.
+
 ## Recréation volontaire
 
 ```powershell
-# Destructif : demande de confirmation OUI et contrôle du marqueur du projet.
+# Destructif : demande de confirmation OUI. Aucun contrôle de propriété : les VM sont supprimées par leur nom.
 .\infra\hyperv\create_vms.ps1 -Destroy -Only ase01
 # Puis recréer uniquement cette VM avec le média CentOS.
 .\infra\hyperv\create_vms.ps1 -Only ase01 -CentosIso 'K:\ShareLinux\Image ISO\centos-stream9-dvd.iso'
 ```
 
-Sans `-Only`, `-Destroy` cible les trois VM du projet. Le réseau est toujours conservé. Les anciennes VM créées par le script d'origine n'ont pas le marqueur de propriété et sont volontairement refusées : les examiner manuellement, sans fabriquer de marqueur pour contourner ce contrôle.
+Avec `-Only`, seules les VM nommées et leurs dossiers dans `-VmRoot` sont supprimés ; le réseau est conservé car les autres VM l'utilisent. Sans `-Only`, `-Destroy` cible les trois VM, leurs dossiers, puis supprime aussi le NAT, le commutateur interne et la carte `vEthernet` de l'hôte : le réseau est recréé au lancement suivant. Les dossiers d'un essai précédent situés ailleurs que dans `-VmRoot` (par exemple `I:\POC\HyperV\RT_Meteo_ASE`) ne sont pas touchés et doivent être supprimés à la main une fois les VM correspondantes retirées.
 
 ## Suite
 

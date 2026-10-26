@@ -38,7 +38,7 @@ git status
 # Afficher les changements avant leur publication.
 git diff
 # Ajouter seulement les fichiers voulus, jamais les médias ni les secrets.
-git add -- infra/hyperv docs README.md .gitignore .gitattributes
+git add -- infra/hyperv docs images README.md .gitignore .gitattributes
 git diff --cached
 git commit -m 'Adapte infrastructure Hyper-V RT_Meteo_ASE'
 git push -u origin HEAD
