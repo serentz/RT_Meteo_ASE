@@ -73,7 +73,7 @@ Les vues `meteo.etat_indicateur` (une ligne par instance et par indicateur : val
 
 **État inconnu.** Il s'affiche si l'instance n'a jamais été relevée, si le dernier relevé est en erreur, s'il est périmé ou si les seuils manquent : il n'y a jamais de faux soleil. La péremption est de 180 secondes (3 cycles), réglable dans `meteo.parametre` (`peremption_s`). Le message d'erreur et la date du dernier relevé sont dans les vues.
 
-**Niveau d'une instance.** Il reprend le plus grave de ses indicateurs, dans l'ordre orage > inconnu > nuage > soleil : une alarme connue prime, mais on n'affiche jamais soleil ni nuage s'il manque une mesure. L'icône « inconnu » proposée est la lune endormie (`images/iconnes/lune dors.png`).
+**Niveau d'une instance.** Il reprend le plus grave de ses indicateurs, dans l'ordre orage > inconnu > nuage > soleil : une alarme connue prime, mais on n'affiche jamais soleil ni nuage s'il manque une mesure. L'icône « inconnu » est la lune endormie (`images/iconnes/lune dors.png`).
 
 Vue globale : une tuile cliquable par instance, avec son icône. Vue détail : une ligne par indicateur avec valeur, unité, icône et seuils. Les tableaux de bord Grafana restent à réaliser (`grafana/`).
 
