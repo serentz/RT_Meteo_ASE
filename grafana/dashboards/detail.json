@@ -6,7 +6,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 6,
+  "version": 7,
   "refresh": "30s",
   "time": {
     "from": "now-6h",
@@ -56,7 +56,7 @@
         "x": 0,
         "y": 0,
         "w": 24,
-        "h": 4
+        "h": 3
       },
       "targets": [
         {
@@ -142,9 +142,9 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 4,
+        "y": 3,
         "w": 24,
-        "h": 8
+        "h": 7
       },
       "targets": [
         {
@@ -262,9 +262,9 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 12,
+        "y": 10,
         "w": 24,
-        "h": 12
+        "h": 8
       },
       "targets": [
         {
@@ -331,9 +331,9 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 24,
+        "y": 18,
         "w": 24,
-        "h": 10
+        "h": 9
       },
       "targets": [
         {
