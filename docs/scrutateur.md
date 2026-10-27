@@ -98,7 +98,7 @@ sudo -u postgres psql -d meteo
 L'invite devient `meteo=#`. Taper alors l'instruction suivante (en remplaçant le mot de passe) :
 
 ```sql
-INSERT INTO meteo.instance (nom, login, password) VALUES ('ase01', 'scrutateur', 'MOT_DE_PASSE_ASE');
+INSERT INTO meteo.instance (nom, login, password, host, port) VALUES ('ASE01', 'scrutateur', 'MOT_DE_PASSE_ASE', '192.168.50.21', 5000);
 ```
 
 La console répond `INSERT 0 1`. Vérifier :
@@ -115,13 +115,14 @@ Autres opérations, à taper dans la même console (`meteo=#`) :
 -- Instance sur un autre port ou un autre nom de machine :
 INSERT INTO meteo.instance (nom, login, password, host, port) VALUES ('ase_prod1', 'supervision', 'MOT_DE_PASSE', 'srv-ase1.exemple.fr', 5000);
 -- Changer un mot de passe :
-UPDATE meteo.instance SET password = 'NOUVEAU_MOT_DE_PASSE' WHERE nom = 'ase01';
+UPDATE meteo.instance SET password = 'NOUVEAU_MOT_DE_PASSE' WHERE nom = 'ASE01';
 -- Retirer une instance de la surveillance :
-UPDATE meteo.instance SET actif = false WHERE nom = 'ase01';
+UPDATE meteo.instance SET actif = false WHERE nom = 'ASE01';
 ```
 
 - Si le mot de passe contient une apostrophe, la doubler (`''`).
-- `nom` sert de nom de machine quand `host` est vide : depuis le bastion, `ase01` est résolu par `/etc/hosts`.
+- `nom` est le nom affiché : ici le nom du serveur ASE (`ASE01`). Quand `host` est vide, il sert aussi de nom de machine ; renseigner `host` avec l'adresse IP dès que ce n'est pas un nom de machine résolu par le bastion.
+- Le nom doit ensuite être écrit **exactement** pareil (majuscules comprises) dans `--tester` (section 3.4).
 - Le scrutateur relit cette table à chaque cycle : aucune relance n'est nécessaire.
 - Le mot de passe est stocké en clair : n'accorder aucun autre droit sur cette table (voir `sql/postgresql/002_roles.sql`).
 
@@ -153,6 +154,7 @@ sudo -i -u sybase
 La dernière commande ouvre un terminal sous le compte `sybase` (invite `[sybase@ase01 ~]$`). Lancer l'installateur SAP depuis ce terminal, avec `/opt/sap` comme répertoire d'installation ; `exit` ramène au compte `admin01`. Le nom du compte et le répertoire sont des exemples : en prendre d'autres si l'équipe a une convention.
 
 - Les prérequis système (bibliothèques, paramètres du noyau, mémoire partagée) sont ceux de la documentation d'installation de SAP ASE 16.0 SP04 pour Linux. Ils ne sont pas vérifiés dans ce dépôt, et CentOS Stream 9 n'est pas une plate-forme certifiée pour ASE (voir le README).
+- Sur la VM de test de ce POC, ASE 16.0 SP04 PL08 a été installé avec l'installateur de SAP (`setup.bin`) sous le compte `admin01`, dans `/opt/sap`, serveur `ASE01`, port 5000. Cela fonctionne ; `admin01` étant le compte d'administration de la VM, un compte dédié reste préférable.
 - Après une installation faite par erreur avec `sudo` : arrêter ASE s'il tourne, puis déplacer ou supprimer l'ancien répertoire d'installation (et les devices créés ailleurs) avant de recommencer. Ne pas installer deux fois dans le même répertoire.
 
 ### 2.1 Se connecter à ASE avec `isql` (sur ase01 ou sur le serveur de l'instance)
@@ -161,11 +163,13 @@ La dernière commande ouvre un terminal sous le compte `sybase` (invite `[sybase
 
 ```bash
 . /CHEMIN/INSTALLATION_ASE/SYBASE.sh
+export LANG=en_US.UTF-8
 isql -U sa -S NOM_DU_SERVEUR_ASE -w 250
 ```
 
 - `/CHEMIN/INSTALLATION_ASE/` est le répertoire d'installation d'ASE ; `SYBASE.sh` y charge les variables d'environnement.
-- `NOM_DU_SERVEUR_ASE` est le nom du serveur déclaré dans le fichier `interfaces` d'ASE.
+- `NOM_DU_SERVEUR_ASE` est le nom du serveur déclaré dans le fichier `interfaces` d'ASE (`ps -eo cmd | grep [d]ataserver` l'affiche après `-s`).
+- `export LANG=en_US.UTF-8` est nécessaire quand la session est en `fr_FR.UTF-8` : `isql` refuse toute locale absente de `locales.dat` (voir le dépannage). Pour le rendre permanent : `echo 'export LANG=en_US.UTF-8' >> ~/.bash_profile`.
 - `isql` demande le mot de passe. L'invite devient `1>`. Taper l'instruction, puis `go` sur la ligne suivante pour l'exécuter. Quitter avec `quit`.
 
 Pour une instance existante, utiliser un compte d'administration habituel. Créer le login de supervision (dans `isql`) :
@@ -255,10 +259,10 @@ Enregistrer avec `Ctrl+O` puis `Entrée`, quitter avec `Ctrl+X`. Si le mot de pa
 
 Ces commandes lancent le script sous le compte de service `scrutateur`, avec les variables du fichier ci-dessus.
 
-Essai d'une instance, sans rien écrire dans PostgreSQL (remplacer `ase01` par le nom déclaré en 1.4) :
+Essai d'une instance, sans rien écrire dans PostgreSQL (remplacer `ASE01` par le nom déclaré en 1.4, majuscules comprises) :
 
 ```bash
-sudo -u scrutateur bash -c 'set -a; . /etc/scrutateur/scrutateur.env; set +a; cd /opt/scrutateur/app && /opt/scrutateur/venv/bin/python -m scrutateur --tester ase01'
+sudo -u scrutateur bash -c 'set -a; . /etc/scrutateur/scrutateur.env; set +a; cd /opt/scrutateur/app && /opt/scrutateur/venv/bin/python -m scrutateur --tester ASE01'
 ```
 
 Le script lit l'instance dans `meteo.instance` (PostgreSQL doit donc être joignable et l'instance déclarée), interroge ASE et affiche en JSON les indicateurs (`nb_bloques`, `blocage_max_s`, `requete_max_s`, ...) et le tableau des processus lus (`details`). Si l'instance est absente ou inactive, il liste celles qu'il connaît ; si ASE ne répond pas, il affiche une ligne d'erreur.
@@ -296,6 +300,7 @@ Variables de `/etc/scrutateur/scrutateur.env` (valeurs par défaut entre parenth
 | `could not translate host name "pg01"` | bastion | Résolution de nom : remplacer `pg01` par `192.168.50.11` dans la commande ou dans `scrutateur.env`. |
 | `Can't open lib 'FreeTDS'` | bastion | Paquet `tdsodbc` absent, ou pilote non déclaré dans `/etc/odbcinst.ini` : régler `SCRUTATEUR_ODBC_PILOTE` sur le nom qui y figure. |
 | `Login timeout expired`, `Unable to connect` | bastion | Réseau, port 5000, `interfaces` d'ASE qui n'écoute pas sur le réseau, nom non résolu. Essayer 2.2 puis 2.3. |
+| `The context allocation routine failed when it tried to load localization files` / `Locale name "fr_FR.UTF-8" doesn't exist` | ase01 | `isql` lancé dans une session dont la locale est inconnue d'ASE : `export LANG=en_US.UTF-8` puis relancer. |
 | `Login failed` | bastion | Mauvais login ou mot de passe dans `meteo.instance` (corriger avec le `UPDATE` de 1.4). |
 | `Invalid column name 'execution_time'` ou droit refusé sur `sysprocesses` | bastion | La colonne n'existe pas sur cette version d'ASE, ou le login de supervision ne lit pas `master..sysprocesses` : essayer la requête de `sql/ase/supervision.sql` sous `isql`. |
 | Caractères accentués illisibles | bastion | Régler `ClientCharset` (en dur dans `scrutateur/ase.py`) selon le jeu de caractères d'ASE. |
