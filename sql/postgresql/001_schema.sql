@@ -97,7 +97,7 @@ INSERT INTO meteo.seuil (instance_id, indicateur, warning, alarme) VALUES
     (NULL, 'blocage_max',     30, 120),
     (NULL, 'blocage_moyen',   10,  60),
     (NULL, 'requete_max',     60, 300),
-    (NULL, 'requete_moyenne', 10,  60)
+    (NULL, 'requete_moyenne', 120, 300)
 ON CONFLICT (instance_id, indicateur) DO NOTHING;
 
 -- Parametres. peremption_s : au-dela, un releve est considere perime (3 cycles de 60 s).

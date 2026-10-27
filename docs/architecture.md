@@ -73,7 +73,7 @@ Valeurs initiales **provisoires** (secondes), à ajuster selon la charge :
 | blocage max | 30 | 120 |
 | blocage moyen | 10 | 60 |
 | requête max | 60 | 300 |
-| requête moyenne | 10 | 60 |
+| requête moyenne | 120 | 300 |
 
 Les vues `meteo.etat_indicateur` (une ligne par instance et par indicateur : valeur, seuils, niveau) et `meteo.etat_instance` (une ligne par instance : pire niveau) alimentent l'affichage. Le niveau est `soleil`, `nuage`, `orage` ou `inconnu`.
 

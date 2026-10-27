@@ -24,7 +24,7 @@ INSERT INTO meteo.instance (nom, login, password, actif) VALUES
 
 -- Releves : (instance, statut, erreur, duree, nb_bloques, bmax, bmoy, nb_req, rmax, rmoy, processus)
 SELECT meteo.enregistrer_mesure(pg_temp.id('t_ok'),    'ok', NULL, 120, 0, 0, 0, 0, 0, 0);
-SELECT meteo.enregistrer_mesure(pg_temp.id('t_nuage'), 'ok', NULL, 130, 1, 45, 45, 2, 40, 22.5,
+SELECT meteo.enregistrer_mesure(pg_temp.id('t_nuage'), 'ok', NULL, 130, 1, 45, 45, 2, 40, 150,
     '[{"spid":12,"uid":7,"login":"app","statut":"lock sleep","hostname":"srv2","programme":"appli","hostprocess":"99",
        "cmd":"UPDATE","bloqueur_spid":9,"blocage_s":45,"execution_s":40},
       {"spid":9,"uid":7,"login":"app","statut":"sleeping","hostname":"srv2","programme":"appli","hostprocess":"98",
@@ -51,11 +51,11 @@ SELECT pg_temp.verifie(
 SELECT pg_temp.verifie(pg_temp.niveau_ind('t_nuage', 'blocage_max')    = 'nuage',  '45 s >= warning 30 : nuage');
 SELECT pg_temp.verifie(pg_temp.niveau_ind('t_nuage', 'blocage_moyen')  = 'nuage',  '45 s >= warning 10 : nuage');
 SELECT pg_temp.verifie(pg_temp.niveau_ind('t_nuage', 'requete_max') = 'soleil', '40 s < warning 60 : soleil');
-SELECT pg_temp.verifie(pg_temp.niveau_ind('t_nuage', 'requete_moyenne') = 'nuage', '22,5 s >= warning 10 : nuage');
+SELECT pg_temp.verifie(pg_temp.niveau_ind('t_nuage', 'requete_moyenne') = 'nuage', '150 s >= warning 120 : nuage');
 SELECT meteo.enregistrer_mesure(pg_temp.id('t_ok'), 'ok', NULL, 1, 1, 30, 30, 1, 60, 10);
 SELECT pg_temp.verifie(pg_temp.niveau_ind('t_ok', 'blocage_max') = 'nuage', 'valeur = warning : nuage');
 SELECT pg_temp.verifie(pg_temp.niveau_ind('t_ok', 'requete_max') = 'nuage', 'valeur = warning : nuage (requetes)');
-SELECT meteo.enregistrer_mesure(pg_temp.id('t_ok'), 'ok', NULL, 1, 1, 120, 60, 1, 300, 60);
+SELECT meteo.enregistrer_mesure(pg_temp.id('t_ok'), 'ok', NULL, 1, 1, 120, 60, 1, 300, 300);
 SELECT pg_temp.verifie(pg_temp.niveau_ind('t_ok', 'blocage_max') = 'orage', 'valeur = alarme : orage');
 SELECT pg_temp.verifie(pg_temp.niveau_ind('t_ok', 'requete_moyenne') = 'orage', 'valeur = alarme : orage (moyenne)');
 SELECT meteo.enregistrer_mesure(pg_temp.id('t_ok'), 'ok', NULL, 1, 0, 0, 0, 0, 0, 0);   -- retour a la normale
