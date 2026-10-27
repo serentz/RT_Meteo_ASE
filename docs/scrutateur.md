@@ -196,6 +196,8 @@ sudo apt install -y freetds-bin
 TDSVER=5.0 tsql -H 192.168.50.21 -p 5000 -U scrutateur
 ```
 
+**Attention :** sur le bastion, la commande `isql` n'est pas celle d'ASE. Le paquet `unixodbc` (installé en 3.2) fournit un autre outil du même nom, qui s'utilise avec un nom de source de données (`isql -v NOM_DSN`) et ne comprend pas `-S`. Sur le bastion, utiliser `tsql`. Le vrai `isql` d'ASE se trouve sur les machines où le serveur ou le client SAP est installé (sous `.../OCS-16_0/bin/` après `. SYBASE.sh`).
+
 `tsql` (client FreeTDS) demande le mot de passe `MOT_DE_PASSE_ASE`, puis affiche l'invite `1>`. Coller la requête de `sql/ase/supervision.sql`, du `SELECT` jusqu'à la ligne `go` incluse. Le tableau des processus s'affiche (il peut être vide si personne n'exécute de requête). Quitter avec `exit`.
 
 Pour une instance existante, remplacer l'adresse et le port : `TDSVER=5.0 tsql -H srv-ase1.exemple.fr -p 5000 -U supervision`.
