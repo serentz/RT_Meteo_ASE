@@ -2,9 +2,9 @@
 
 Une seule requete sur master..sysprocesses ; le tableau obtenu est lu en memoire et les indicateurs en sont
 calcules (indicateurs.py). Colonnes : blocked = spid du bloqueur (0 si aucun), time_blocked = duree du blocage
-EN SECONDES, execution_time = duree de la requete en cours EN SECONDES. Requete validee sous isql par l'utilisateur
-sur une instance reelle ; execution_time n'est pas dans la page de documentation SAP consultee (voir
-sql/ase/supervision.sql pour les points restant a valider).
+EN SECONDES, execution_time = duree de la requete en cours EN MILLISECONDES (constate sur ASE01 16.0 SP04 PL08 :
+WAITFOR DELAY '00:02:00' donne 59065 puis 111424) ; elle est convertie en secondes par ligne_processus.
+execution_time n'est pas dans la page de documentation SAP consultee (voir sql/ase/supervision.sql).
 
 La requete est reproduite a l'identique dans sql/ase/supervision.sql pour l'essayer sous isql.
 Le pilote est charge a la demande (import tardif) : le reste du scrutateur et ses tests n'en ont pas besoin.
@@ -85,8 +85,13 @@ def ligne_processus(r) -> LigneProcessus:
         cmd=_texte(r[7]),
         bloqueur_spid=_entier(r[8]) or 0,
         blocage_s=_entier(r[9]),
-        execution_s=_entier(r[10]),
+        execution_s=_ms_en_s(r[10]),
     )
+
+
+def _ms_en_s(valeur) -> int | None:
+    """execution_time (millisecondes) vers secondes entieres."""
+    return None if valeur is None else int(float(valeur)) // 1000
 
 
 def _entier(valeur) -> int | None:

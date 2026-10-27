@@ -8,7 +8,7 @@
 -- Colonnes lues dans master..sysprocesses :
 --   blocked        spid du processus bloqueur, 0 si le processus n'est pas bloque
 --   time_blocked   duree du blocage, en secondes (NULL si le processus n'est pas bloque)
---   execution_time duree de la requete en cours, en secondes ; vaut 0 (et non NULL) pour une session AWAITING COMMAND
+--   execution_time duree de la requete en cours, en MILLISECONDES (constate : WAITFOR de 2 min -> 59065, 111424) ; vaut 0 (et non NULL) pour une session AWAITING COMMAND
 --   uid            identifiant d'utilisateur dans la base courante du processus
 -- Lignes retenues : requete en cours (cmd <> 'AWAITING COMMAND' : sans cela toutes les sessions inactives, dont
 -- execution_time vaut 0, rempliraient le tableau) OU bloque OU bloqueur d'un autre processus (le bloqueur est
@@ -23,7 +23,7 @@
 --   1. le login de supervision peut lire master..sysprocesses ;
 --   2. les exclusions (uid > 0, JOB SCHEDULER) ne laissent aucune autre tache interne dans le tableau et
 --      n'ecartent aucune session applicative attendue ;
---   3. execution_time croit en secondes pendant une requete longue (ex. WAITFOR DELAY '00:00:30' dans une session) ;
+--   3. execution_time croit (en millisecondes) pendant une requete longue (ex. WAITFOR DELAY '00:00:30' dans une session) ;
 --   4. blocked / time_blocked refletent un blocage provoque a la main
 --      (session 1 : begin tran + update sans commit ; session 2 : update de la meme ligne).
 -- Creation d'un login dedie (a adapter, mot de passe a choisir) :

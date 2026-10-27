@@ -37,6 +37,11 @@ class TestCoherence(unittest.TestCase):
         requetes = "\n".join(l for l in fichier.splitlines() if not l.lstrip().startswith("--"))
         self.assertNotRegex(requetes.lower(), r"\bmon[a-z]+\b")
 
+    def test_execution_time_est_converti_de_millisecondes_en_secondes(self):
+        from scrutateur import ase
+        r = (1, 1, 'sa', 'alarm sleep', 'h', 'isql', '1', 'WAITFOR', 0, None, 111424)
+        self.assertEqual(ase.ligne_processus(r).execution_s, 111)
+
     def test_la_requete_ne_retient_pas_les_sessions_inactives(self):
         self.assertIn("isnull(p.cmd, '') <> 'AWAITING COMMAND'", SQL_PROCESSUS)
 

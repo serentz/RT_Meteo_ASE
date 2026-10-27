@@ -11,8 +11,8 @@ REGLAGES = Reglages(pg_dsn="postgresql://x")
 
 # Ordre des colonnes de SQL_PROCESSUS :
 # spid, uid, login, status, hostname, program_name, hostprocess, cmd, blocked, time_blocked, execution_time
-LIGNE_ACTIVE = (2190, 2, "app_svc ", "running", "srv1", "isql", "4062306", "SELECT", 0, None, 4)
-LIGNE_BLOQUEE = (2200, 7, "batch", "lock sleep", "srv2", "appli", "99", "UPDATE", 2210, 45, 120.0)
+LIGNE_ACTIVE = (2190, 2, "app_svc ", "running", "srv1", "isql", "4062306", "SELECT", 0, None, 4500)
+LIGNE_BLOQUEE = (2200, 7, "batch", "lock sleep", "srv2", "appli", "99", "UPDATE", 2210, 45, 120000.0)
 LIGNE_BLOQUEUR = (2210, 7, "batch", "sleeping", "srv2", "appli", "98", "AWAITING COMMAND", 0, None, 0)
 
 

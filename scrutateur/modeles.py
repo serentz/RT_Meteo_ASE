@@ -31,7 +31,7 @@ class LigneProcessus:
     login: str | None
     bloqueur_spid: int  # blocked : 0 si le processus n'est pas bloque
     blocage_s: int | None = None  # time_blocked, en secondes ; None si pas bloque
-    execution_s: int | None = None  # execution_time, en secondes ; None si aucune requete en cours
+    execution_s: int | None = None  # execution_time converti en secondes (ASE le donne en ms) ; None si aucune requete en cours
     uid: int | None = None
     hostname: str | None = None
     programme: str | None = None  # program_name
