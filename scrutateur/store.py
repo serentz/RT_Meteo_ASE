@@ -19,11 +19,11 @@ ORDER BY nom"""
 
 # Casts explicites : le type des parametres envoye par le pilote ne doit pas influencer le choix de la fonction.
 SQL_ENREGISTRER = """\
-SELECT meteo.enregistrer_mesure(
+SELECT meteo.enregistrer_transactions(meteo.enregistrer_mesure(
     %s::integer, %s::text, %s::text, %s::integer,
     %s::integer, %s::numeric, %s::numeric,
     %s::integer, %s::numeric, %s::numeric,
-    %s::jsonb)"""
+    %s::jsonb), %s::jsonb)"""
 
 DELAI_CONNEXION_S = 10
 
@@ -53,11 +53,19 @@ def parametres_enregistrement(mesure: Mesure) -> tuple[Any, ...]:
             ind.nb_bloques, ind.blocage_max_s, ind.blocage_moyen_s,
             ind.nb_requetes, ind.requete_max_s, ind.requete_moyenne_s,
             json.dumps(details),
+            json.dumps([
+                {
+                    "spid": t.spid, "login": t.login, "hostname": t.hostname, "programme": t.programme,
+                    "hostprocess": t.hostprocess, "cmd": t.cmd, "statut": t.statut, "debut": t.debut,
+                    "duree_s": t.duree_s,
+                }
+                for t in ind.transactions
+            ]),
         )
     return (
         mesure.instance_id, "erreur", mesure.erreur or "erreur inconnue", mesure.duree_ms,
         None, None, None, None, None, None,
-        "[]",
+        "[]", "[]",
     )
 
 

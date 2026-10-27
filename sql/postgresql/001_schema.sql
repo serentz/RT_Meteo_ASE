@@ -68,6 +68,21 @@ CREATE TABLE IF NOT EXISTS meteo.processus (
     PRIMARY KEY (mesure_id, spid)
 );
 
+-- --- Transactions ouvertes lues sur ASE a chaque releve (affichage seul : aucun indicateur ni seuil) ----------
+CREATE TABLE IF NOT EXISTS meteo.transaction_ouverte (
+    mesure_id   bigint  NOT NULL REFERENCES meteo.mesure ON DELETE CASCADE,
+    spid        integer NOT NULL,
+    login       text,
+    hostname    text,
+    programme   text,
+    hostprocess text,
+    cmd         text,
+    statut      text,
+    debut       timestamp,          -- heure du serveur ASE, sans fuseau
+    duree_s     integer,            -- secondes depuis le debut de la plus ancienne transaction de la session
+    PRIMARY KEY (mesure_id, spid)
+);
+
 -- --- Indicateurs affiches et seuils -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS meteo.indicateur (
     code    text    PRIMARY KEY,
@@ -151,6 +166,27 @@ BEGIN
 END;
 $$;
 REVOKE ALL ON FUNCTION meteo.enregistrer_mesure(integer, text, text, integer, integer, numeric, numeric, integer, numeric, numeric, jsonb) FROM PUBLIC;
+
+-- Transactions ouvertes d'un releve : p_transactions est un tableau JSON d'objets {spid, login, hostname,
+-- programme, hostprocess, cmd, statut, debut, duree_s}. Renvoie p_mesure_id (pour enchainer avec enregistrer_mesure).
+CREATE OR REPLACE FUNCTION meteo.enregistrer_transactions(p_mesure_id bigint, p_transactions jsonb DEFAULT '[]'::jsonb)
+RETURNS bigint
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = meteo, pg_temp
+AS $$
+BEGIN
+    IF p_mesure_id IS NOT NULL AND jsonb_typeof(p_transactions) = 'array' THEN
+        INSERT INTO meteo.transaction_ouverte (mesure_id, spid, login, hostname, programme, hostprocess, cmd,
+                                               statut, debut, duree_s)
+        SELECT p_mesure_id, (e->>'spid')::integer, e->>'login', e->>'hostname', e->>'programme',
+               e->>'hostprocess', e->>'cmd', e->>'statut', (e->>'debut')::timestamp, (e->>'duree_s')::integer
+        FROM jsonb_array_elements(p_transactions) AS e;
+    END IF;
+    RETURN p_mesure_id;
+END;
+$$;
+REVOKE ALL ON FUNCTION meteo.enregistrer_transactions(bigint, jsonb) FROM PUBLIC;
 
 -- Purge : supprime les mesures plus anciennes que p_jours (les processus suivent en cascade).
 -- A planifier (cron / pg_cron) ; non appelee automatiquement.

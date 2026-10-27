@@ -1,7 +1,8 @@
 """Lecture d'une instance SAP ASE a distance (TDS, port 5000 par defaut) depuis le bastion.
 
-Une seule requete sur master..sysprocesses ; le tableau obtenu est lu en memoire et les indicateurs en sont
-calcules (indicateurs.py). Colonnes : blocked = spid du bloqueur (0 si aucun), time_blocked = duree du blocage
+Une requete sur master..sysprocesses ; le tableau obtenu est lu en memoire et les indicateurs en sont
+calcules (indicateurs.py). Une seconde requete (master..systransactions) liste les transactions ouvertes ; elle
+n'entre dans aucun indicateur. Colonnes : blocked = spid du bloqueur (0 si aucun), time_blocked = duree du blocage
 EN SECONDES, execution_time = duree de la requete en cours EN MILLISECONDES (constate sur ASE01 16.0 SP04 PL08 :
 WAITFOR DELAY '00:02:00' donne 59065 puis 111424) ; elle est convertie en secondes par ligne_processus.
 execution_time n'est pas dans la page de documentation SAP consultee (voir sql/ase/supervision.sql).
@@ -14,7 +15,7 @@ from __future__ import annotations
 from typing import Callable
 
 from .config import Reglages
-from .modeles import Instance, Lecture, LigneProcessus
+from .modeles import Instance, Lecture, LigneProcessus, LigneTransaction
 
 SQL_PROCESSUS = """\
 SELECT p.spid, p.uid, suser_name(p.suid), p.status, p.hostname, p.program_name, p.hostprocess,
@@ -24,6 +25,18 @@ WHERE ((p.execution_time IS NOT NULL AND isnull(p.cmd, '') <> 'AWAITING COMMAND'
        OR p.time_blocked IS NOT NULL
        OR p.spid IN (SELECT b.blocked FROM master..sysprocesses b WHERE b.blocked <> 0))
   AND p.uid > 0 AND isnull(p.program_name, '') <> 'JOB SCHEDULER' AND p.spid <> @@spid"""
+
+# Transactions ouvertes (sql/ase/transactions.sql). Lecture seule de tables systeme, jamais les tables MDA.
+SQL_TRANSACTIONS = """\
+SELECT t.spid, suser_name(p.suid), p.hostname, p.program_name, p.hostprocess, p.cmd, p.status,
+       min(t.starttime) AS debut, datediff(ss, min(t.starttime), getdate()) AS duree_s
+FROM master..systransactions t, master..sysprocesses p
+WHERE p.spid = t.spid
+  AND p.uid > 0 AND isnull(p.program_name, '') <> 'JOB SCHEDULER' AND p.spid <> @@spid
+GROUP BY t.spid, suser_name(p.suid), p.hostname, p.program_name, p.hostprocess, p.cmd, p.status
+ORDER BY duree_s DESC"""
+
+MAX_TRANSACTIONS = 50
 
 # Fonction qui interroge une instance et rend sa lecture brute (ou leve une exception).
 Source = Callable[[Instance], Lecture]
@@ -65,7 +78,10 @@ def creer_source_odbc(reglages: Reglages) -> Source:
             conn.timeout = reglages.ase_requete_timeout_s
             curseur = conn.cursor()
             curseur.execute(SQL_PROCESSUS)
-            return Lecture(processus=[ligne_processus(r) for r in curseur.fetchall()])
+            processus = [ligne_processus(r) for r in curseur.fetchall()]
+            curseur.execute(SQL_TRANSACTIONS)
+            transactions = [ligne_transaction(r) for r in curseur.fetchall()[:MAX_TRANSACTIONS]]
+            return Lecture(processus=processus, transactions=transactions)
         finally:
             conn.close()
 
@@ -87,6 +103,29 @@ def ligne_processus(r) -> LigneProcessus:
         blocage_s=_entier(r[9]),
         execution_s=_ms_en_s(r[10]),
     )
+
+
+def ligne_transaction(r) -> LigneTransaction:
+    """Une ligne de SQL_TRANSACTIONS (dans l'ordre des colonnes) vers LigneTransaction."""
+    return LigneTransaction(
+        spid=int(r[0]),
+        login=_texte(r[1]),
+        hostname=_texte(r[2]),
+        programme=_texte(r[3]),
+        hostprocess=_texte(r[4]),
+        cmd=_texte(r[5]),
+        statut=_texte(r[6]),
+        debut=_horodatage(r[7]),
+        duree_s=max(_entier(r[8]) or 0, 0),
+    )
+
+
+def _horodatage(valeur) -> str | None:
+    if valeur is None:
+        return None
+    if hasattr(valeur, "isoformat"):
+        return valeur.isoformat(sep=" ", timespec="seconds")
+    return str(valeur)
 
 
 def _ms_en_s(valeur) -> int | None:

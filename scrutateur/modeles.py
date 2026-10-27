@@ -39,10 +39,26 @@ class LigneProcessus:
 
 
 @dataclass(frozen=True)
+class LigneTransaction:
+    """Une session qui a une transaction ouverte (sql/ase/transactions.sql)."""
+
+    spid: int
+    login: str | None = None
+    hostname: str | None = None
+    programme: str | None = None
+    hostprocess: str | None = None
+    cmd: str | None = None
+    statut: str | None = None
+    debut: str | None = None  # heure ASE du debut de la plus ancienne transaction de la session
+    duree_s: int | None = None
+
+
+@dataclass(frozen=True)
 class Lecture:
-    """Resultat brut d'une interrogation d'ASE : le tableau des processus, tel quel."""
+    """Resultat brut d'une interrogation d'ASE : le tableau des processus et les transactions ouvertes."""
 
     processus: list[LigneProcessus]
+    transactions: list[LigneTransaction] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -56,6 +72,7 @@ class Indicateurs:
     requete_max_s: float
     requete_moyenne_s: float
     details: list[LigneProcessus]
+    transactions: list[LigneTransaction] = field(default_factory=list)  # de la plus longue a la plus courte
 
 
 @dataclass(frozen=True)

@@ -6,7 +6,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 4,
+  "version": 5,
   "refresh": "30s",
   "time": {
     "from": "now-6h",
@@ -277,6 +277,74 @@
           "rawQuery": true,
           "editorMode": "code",
           "rawSql": "WITH dernier AS (\n  SELECT dm.mesure_id FROM meteo.derniere_mesure dm JOIN meteo.instance i USING (instance_id)\n  WHERE i.nom = '$instance' AND dm.statut = 'ok'\n), t AS (\n  SELECT p.* FROM meteo.processus p JOIN dernier USING (mesure_id)\n)\nSELECT spid AS \"spid\", login AS \"Login\", hostname AS \"Hôte\", programme AS \"Programme\", hostprocess AS \"Process hôte\",\n       cmd AS \"Commande\", statut AS \"Statut\", bloqueur_spid AS \"Bloqué par\", blocage_s AS \"Blocage (s)\",\n       execution_s AS \"Requête (s)\"\nFROM t\nUNION ALL\nSELECT NULL, 'Aucune requête en cours ni blocage', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL\nWHERE EXISTS (SELECT 1 FROM dernier) AND NOT EXISTS (SELECT 1 FROM t)\nORDER BY \"Blocage (s)\" DESC NULLS LAST, \"Requête (s)\" DESC NULLS LAST, \"spid\""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Commande"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Login"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 130
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "Transactions ouvertes, de la plus longue à la plus courte",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "meteo-pg"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "meteo-pg"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "WITH dernier AS (\n  SELECT dm.mesure_id FROM meteo.derniere_mesure dm JOIN meteo.instance i USING (instance_id)\n  WHERE i.nom = '$instance' AND dm.statut = 'ok'\n), t AS (\n  SELECT x.* FROM meteo.transaction_ouverte x JOIN dernier USING (mesure_id)\n)\nSELECT duree_s AS \"Durée (s)\", to_char(debut, 'YYYY-MM-DD HH24:MI:SS') AS \"Début\", spid AS \"spid\", login AS \"Login\",\n       hostname AS \"Hôte\", programme AS \"Programme\", hostprocess AS \"Process hôte\", cmd AS \"Commande\", statut AS \"Statut\"\nFROM t\nUNION ALL\nSELECT NULL, NULL, NULL, 'Aucune transaction ouverte', NULL, NULL, NULL, NULL, NULL\nWHERE EXISTS (SELECT 1 FROM dernier) AND NOT EXISTS (SELECT 1 FROM t)\nORDER BY \"Durée (s)\" DESC NULLS LAST, \"spid\""
         }
       ],
       "fieldConfig": {

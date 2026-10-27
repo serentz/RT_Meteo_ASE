@@ -1,3 +1,4 @@
+import datetime
 import sys
 import types
 import unittest
@@ -14,22 +15,24 @@ REGLAGES = Reglages(pg_dsn="postgresql://x")
 LIGNE_ACTIVE = (2190, 2, "app_svc ", "running", "srv1", "isql", "4062306", "SELECT", 0, None, 4500)
 LIGNE_BLOQUEE = (2200, 7, "batch", "lock sleep", "srv2", "appli", "99", "UPDATE", 2210, 45, 120000.0)
 LIGNE_BLOQUEUR = (2210, 7, "batch", "sleeping", "srv2", "appli", "98", "AWAITING COMMAND", 0, None, 0)
+# Ordre des colonnes de SQL_TRANSACTIONS : spid, login, hostname, program_name, hostprocess, cmd, status, debut, duree_s
+TRANSACTION = (28, "sa ", "bastion", "isql", "1803", "AWAITING COMMAND", "recv sleep", datetime.datetime(2026, 10, 27, 16, 15, 0), 28)
 
 
 class FauxCurseur:
-    def __init__(self, lignes):
-        self.lignes, self.executes = lignes, []
+    def __init__(self, lignes, transactions=()):
+        self.lignes, self.transactions, self.executes = lignes, list(transactions), []
 
     def execute(self, sql):
         self.executes.append(sql)
 
     def fetchall(self):
-        return self.lignes
+        return self.transactions if self.executes and self.executes[-1] == ase.SQL_TRANSACTIONS else self.lignes
 
 
 class FausseConnexion:
-    def __init__(self, lignes):
-        self.curseur, self.fermee, self.timeout = FauxCurseur(lignes), False, None
+    def __init__(self, lignes, transactions=()):
+        self.curseur, self.fermee, self.timeout = FauxCurseur(lignes, transactions), False, None
 
     def cursor(self):
         return self.curseur
@@ -65,17 +68,24 @@ class TestLigneProcessus(unittest.TestCase):
 
 
 class TestSourceOdbc(unittest.TestCase):
-    def lire(self, lignes):
-        connexion, appels = FausseConnexion(lignes), []
+    def lire(self, lignes, transactions=()):
+        connexion, appels = FausseConnexion(lignes, transactions), []
         with mock.patch.dict(sys.modules, {"pyodbc": faux_pyodbc(connexion, appels)}):
             lecture = ase.creer_source_odbc(REGLAGES)(instance(1))
         return lecture, connexion, appels
 
-    def test_une_seule_requete_et_connexion_fermee(self):
-        lecture, connexion, _ = self.lire([LIGNE_ACTIVE, LIGNE_BLOQUEE, LIGNE_BLOQUEUR])
-        self.assertEqual(connexion.curseur.executes, [ase.SQL_PROCESSUS])
+    def test_deux_requetes_une_connexion_fermee(self):
+        lecture, connexion, _ = self.lire([LIGNE_ACTIVE, LIGNE_BLOQUEE, LIGNE_BLOQUEUR], [TRANSACTION])
+        self.assertEqual(connexion.curseur.executes, [ase.SQL_PROCESSUS, ase.SQL_TRANSACTIONS])
+        t = lecture.transactions[0]
+        self.assertEqual((t.spid, t.login, t.hostname, t.cmd, t.debut, t.duree_s), (28, "sa", "bastion", "AWAITING COMMAND", "2026-10-27 16:15:00", 28))
         self.assertTrue(connexion.fermee)
         self.assertEqual([p.spid for p in lecture.processus], [2190, 2200, 2210])
+
+    def test_pas_plus_de_50_transactions_conservees(self):
+        lecture, _, _ = self.lire([], [(i, "u", "h", "p", "1", "c", "s", None, 1000 - i) for i in range(80)])
+        self.assertEqual(len(lecture.transactions), ase.MAX_TRANSACTIONS)
+        self.assertEqual(lecture.transactions[0].debut, None)
 
     def test_connexion_en_autocommit_avec_delai(self):
         _, _, appels = self.lire([])

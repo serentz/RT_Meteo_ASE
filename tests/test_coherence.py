@@ -2,7 +2,7 @@ import pathlib
 import re
 import unittest
 
-from scrutateur.ase import SQL_PROCESSUS
+from scrutateur.ase import SQL_PROCESSUS, SQL_TRANSACTIONS
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
 
@@ -15,6 +15,17 @@ class TestCoherence(unittest.TestCase):
     def test_requete_ase_identique_au_fichier_sql(self):
         fichier = normalise((RACINE / "sql" / "ase" / "supervision.sql").read_text(encoding="utf-8"))
         self.assertIn(normalise(SQL_PROCESSUS), fichier)
+
+    def test_requete_transactions_identique_au_fichier_sql(self):
+        fichier = normalise((RACINE / "sql" / "ase" / "transactions.sql").read_text(encoding="utf-8"))
+        self.assertIn(normalise(SQL_TRANSACTIONS), fichier)
+
+    def test_requete_transactions_lecture_seule_sans_mda(self):
+        self.assertTrue(SQL_TRANSACTIONS.lstrip().upper().startswith("SELECT"))
+        self.assertNotRegex(SQL_TRANSACTIONS.upper(), r"\b(INSERT|UPDATE|DELETE|DROP|EXEC|TRUNCATE)\b")
+        self.assertNotRegex(SQL_TRANSACTIONS.lower(), r"\bmon[a-z]+\b")
+        self.assertIn("@@spid", SQL_TRANSACTIONS)
+        self.assertIn("isnull(p.program_name, '') <> 'JOB SCHEDULER'", SQL_TRANSACTIONS)
 
     def test_une_seule_requete_ase(self):
         fichier = (RACINE / "sql" / "ase" / "supervision.sql").read_text(encoding="utf-8")
@@ -48,12 +59,27 @@ class TestCoherence(unittest.TestCase):
     def test_la_requete_exclut_la_session_du_scrutateur(self):
         self.assertIn("@@spid", SQL_PROCESSUS)
 
+    def test_cles_json_des_transactions_lues_par_la_fonction_sql(self):
+        import json
+        from scrutateur.indicateurs import calculer_indicateurs
+        from scrutateur.modeles import Lecture, LigneTransaction, Mesure
+        from scrutateur.store import parametres_enregistrement
+
+        lecture = Lecture([], [LigneTransaction(1, "sa", "h", "isql", "9", "AWAITING COMMAND", "recv sleep", "2026-10-27 16:15:00", 28)])
+        params = parametres_enregistrement(Mesure(1, "ok", 1, indicateurs=calculer_indicateurs(lecture)))
+        cles = json.loads(params[11])[0].keys()
+        schema = (RACINE / "sql" / "postgresql" / "001_schema.sql").read_text(encoding="utf-8")
+        corps = schema.split("CREATE OR REPLACE FUNCTION meteo.enregistrer_transactions(")[1].split("$$;")[0]
+        for cle in cles:
+            self.assertIn(f"e->>'{cle}'", corps, f"la cle JSON {cle!r} n'est pas lue")
+
     def test_la_fonction_sql_a_le_meme_nombre_de_parametres_que_le_depot(self):
         from scrutateur.store import SQL_ENREGISTRER
 
         schema = (RACINE / "sql" / "postgresql" / "001_schema.sql").read_text(encoding="utf-8")
         bloc = schema.split("CREATE OR REPLACE FUNCTION meteo.enregistrer_mesure(")[1].split(") RETURNS")[0]
-        self.assertEqual(len(re.findall(r"^\s*p_\w+", bloc, flags=re.M)), SQL_ENREGISTRER.count("%s"))
+        # enregistrer_mesure (11) + le tableau des transactions confie a enregistrer_transactions (1)
+        self.assertEqual(len(re.findall(r"^\s*p_\w+", bloc, flags=re.M)) + 1, SQL_ENREGISTRER.count("%s"))
 
     def test_les_cles_json_du_depot_sont_lues_par_la_fonction_sql(self):
         # Chaque cle du detail envoyee par store.py doit etre extraite par meteo.enregistrer_mesure

@@ -34,7 +34,7 @@ class TestConfig(unittest.TestCase):
         self.assertIn("DRIVER={FreeTDS}", cs)
 
     def test_pire_duree_de_releve(self):
-        self.assertEqual(Reglages(pg_dsn="x").pire_duree_releve_s, 25)  # connexion 10 s + une requete 15 s
+        self.assertEqual(Reglages(pg_dsn="x").pire_duree_releve_s, 40)  # connexion 10 s + deux requetes de 15 s
 
 
 if __name__ == "__main__":

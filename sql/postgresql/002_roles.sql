@@ -38,8 +38,9 @@ GRANT USAGE ON SCHEMA meteo TO scrutateur, grafana_ro;
 
 GRANT SELECT ON meteo.instance TO scrutateur;
 GRANT EXECUTE ON FUNCTION meteo.enregistrer_mesure(integer, text, text, integer, integer, numeric, numeric, integer, numeric, numeric, jsonb) TO scrutateur;
+GRANT EXECUTE ON FUNCTION meteo.enregistrer_transactions(bigint, jsonb) TO scrutateur;
 
 -- --- grafana_ro : lecture seule, SANS acces aux colonnes login et password ---------------------------------
 GRANT SELECT (instance_id, nom, host, port, actif, cree_le) ON meteo.instance TO grafana_ro;
-GRANT SELECT ON meteo.mesure, meteo.processus, meteo.indicateur, meteo.seuil, meteo.parametre,
+GRANT SELECT ON meteo.mesure, meteo.processus, meteo.transaction_ouverte, meteo.indicateur, meteo.seuil, meteo.parametre,
                 meteo.derniere_mesure, meteo.etat_indicateur, meteo.etat_instance TO grafana_ro;

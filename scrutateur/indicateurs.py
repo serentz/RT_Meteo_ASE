@@ -6,6 +6,8 @@ Definitions (docs/architecture.md) :
 - requete : processus qui execute une commande, c'est-a-dire execution_time non NULL et cmd different de
   'AWAITING COMMAND' (une session inactive renvoie 0, pas NULL : elle ne doit pas entrer dans la moyenne) ;
   duree = execution_time (secondes). Max et moyenne portent sur ces processus (bloques compris) ; aucune donne 0.
+- Transactions ouvertes : conservees telles quelles, une par session, de la plus longue a la plus courte ;
+  elles ne participent a aucun indicateur ni a aucun seuil.
 - Un bloqueur inactif figure dans le tableau (la requete SQL le retient) mais n'entre dans aucune moyenne :
   il n'est ni bloque ni en requete. Les taches systeme et la connexion du scrutateur sont deja exclues
   par la requete SQL (voir ase.py).
@@ -23,6 +25,9 @@ def calculer_indicateurs(lecture: Lecture) -> Indicateurs:
     durees_blocage = [max(p.blocage_s or 0, 0) for p in lignes if p.bloqueur_spid]
     durees_requete = [max(p.execution_s, 0) for p in lignes if _requete_active(p)]
 
+    par_session = {t.spid: t for t in lecture.transactions}
+    transactions = sorted(par_session.values(), key=lambda t: t.duree_s or 0, reverse=True)
+
     return Indicateurs(
         nb_bloques=len(durees_blocage),
         blocage_max_s=float(max(durees_blocage, default=0)),
@@ -31,6 +36,7 @@ def calculer_indicateurs(lecture: Lecture) -> Indicateurs:
         requete_max_s=float(max(durees_requete, default=0)),
         requete_moyenne_s=_moyenne(durees_requete),
         details=lignes,
+        transactions=transactions,
     )
 
 

@@ -384,6 +384,17 @@ Depuis le navigateur du PC Windows : `http://192.168.50.10:3000`. Premier accès
 
 Si les tableaux sont vides ou en erreur : *Connections → Data sources → meteo → Save & test*. Une erreur d'authentification vient de `METEO_GRAFANA_PWD` ou de la ligne `grafana_ro` dans `pg_hba.conf` (1.3) ; `sudo journalctl -u grafana-server -n 30 --no-pager` donne le détail.
 
+## Mettre à jour une base déjà installée (transactions ouvertes)
+
+Si le schéma a été installé avant l'ajout des transactions ouvertes, la table `meteo.transaction_ouverte` et la fonction `meteo.enregistrer_transactions` manquent : sans elles, le scrutateur ne peut plus enregistrer ses mesures. Sur pg01, après avoir copié les fichiers du dépôt (section 1.1) :
+
+```bash
+sudo -u postgres psql -d meteo -v ON_ERROR_STOP=1 -f /tmp/sql/postgresql/001_schema.sql
+sudo -u postgres psql -d meteo -v ON_ERROR_STOP=1 -c "GRANT EXECUTE ON FUNCTION meteo.enregistrer_transactions(bigint, jsonb) TO scrutateur; GRANT SELECT ON meteo.transaction_ouverte TO grafana_ro;"
+```
+
+`001_schema.sql` peut être rejoué sans risque (il ne supprime rien) ; les messages « already exists, skipping » sont normaux. Mettre ensuite à jour le scrutateur sur le bastion (`git pull`, puis la copie de la section 3.2 et `sudo systemctl restart scrutateur`) et les tableaux de bord Grafana (section 4.2). Le login ASE de supervision doit pouvoir lire `master..systransactions` (essai : `sql/ase/transactions.sql` sous `isql` avec ce login).
+
 ## Réglages
 
 Variables de `/etc/scrutateur/scrutateur.env` (valeurs par défaut entre parenthèses) : `SCRUTATEUR_INTERVALLE_S` (60), `SCRUTATEUR_MAX_PARALLELE` (16), `SCRUTATEUR_ASE_LOGIN_TIMEOUT_S` (10), `SCRUTATEUR_ASE_REQUETE_TIMEOUT_S` (15), `SCRUTATEUR_ODBC_PILOTE` (FreeTDS), `SCRUTATEUR_TDS_VERSION` (5.0). Après modification : `sudo systemctl restart scrutateur`. Le scrutateur avertit au démarrage si un relevé peut dépasser l'intervalle.
@@ -436,8 +447,10 @@ Le test affiche `OK : tous les controles du schema sont passes` avant la derniè
 
 Réalisé dans l'environnement de préparation (Linux) :
 
-- 49 tests Python (calculs sur le tableau, lecture ASE avec un faux pilote, parallélisme, panne d'une instance, instance bloquée non relancée, relecture de `meteo.instance`, panne de PostgreSQL, mot de passe masqué, cohérence entre la requête, le fichier SQL et le schéma) ;
+- 63 tests Python (calculs sur le tableau, transactions ouvertes, lecture ASE avec un faux pilote, parallélisme, panne d'une instance, instance bloquée non relancée, relecture de `meteo.instance`, panne de PostgreSQL, mot de passe masqué, cohérence entre la requête, le fichier SQL et le schéma) ;
 - schéma, vues, fonction d'écriture et droits des rôles testés sur un vrai PostgreSQL 16 ;
 - code du scrutateur exécuté de bout en bout contre ce PostgreSQL, avec une instance ASE simulée.
 
-**Non réalisé, à valider sur les VM** : toutes les commandes de ce document sur les VM elles-mêmes (écrites d'après l'organisation standard d'Ubuntu 24.04 et vérifiées sur un PostgreSQL 16 Debian, pas exécutées sur pg01 ni sur le bastion), connexion réelle à ASE (pyodbc + FreeTDS, TDS 5.0), pilote `psycopg`, service systemd, exécution de la requête ASE par le scrutateur sur une vraie instance (la requête elle-même a été essayée sous `isql` par l'équipe ; restent les quatre points à valider listés dans `sql/ase/supervision.sql`, dont le sens de `execution_time` et la présence éventuelle d'autres tâches internes dans le tableau), et les scénarios d'acceptation 1 à 3.
+**Validé sur les VM de test (ASE01 16.0 SP04 PL08, PostgreSQL 16 sur pg01, scrutateur et Grafana sur le bastion)** : connexion à ASE par pyodbc et FreeTDS (TDS 5.0) avec le login `scrutateur`, écriture dans PostgreSQL, service systemd, vues, `execution_time` en millisecondes (converti en secondes), exclusion des sessions `AWAITING COMMAND`, blocage et bloqueur identifiés (scénarios d'acceptation 1 à 3), retour au soleil après un blocage, écrans Grafana (tuiles, liste, détail).
+
+**Non réalisé ou à valider** : arrêt d'ASE (la tuile « lune » inconnu, scénario 4), la requête des transactions ouvertes par le scrutateur dans le service (validée sous `isql`), l'instance de travail en PL06, le démarrage automatique d'ASE (2.4), les seuils (provisoires), et l'installation de Grafana sur un bastion neuf (section 4 écrite d'après l'installation faite ensemble).

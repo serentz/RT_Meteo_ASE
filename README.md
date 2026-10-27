@@ -28,11 +28,11 @@ Voir [Installation des VM](docs/installation_vm.md), [Scrutateur](docs/scrutateu
 - `infra/hyperv/check_vms.ps1` : diagnostic en lecture seule (Hyper-V, réseau de l'hôte, ping, port 22, bannière SSH).
 - `images/iconnes/` : icônes météo (soleil, nuages, orages, lune endormie) pour l'affichage.
 - `scrutateur/` : le script Python (une fonction par relevé d'instance, boucle parallèle), son service systemd et son modèle de configuration.
-- `sql/ase/` : la requête de supervision exécutée sur chaque instance ASE.
+- `sql/ase/` : les deux requêtes exécutées sur chaque instance ASE (supervision des processus, transactions ouvertes).
 - `sql/postgresql/` : schéma `meteo` (instances, mesures, seuils, vues d'état, fonction d'écriture) et rôles.
 - `grafana/` : provisioning (source PostgreSQL, tableaux de bord synthèse et détail), voir la section 4 de `docs/scrutateur.md`.
 - `tests/` : tests Python (`unittest`) et test SQL du schéma.
 
 ## État de validation
 
-Scrutateur et schéma PostgreSQL : 49 tests Python et un test SQL passent, et le code a été exécuté de bout en bout contre un PostgreSQL 16 réel avec une instance ASE simulée ; la connexion à une vraie instance ASE n'est pas encore validée (détail dans [docs/scrutateur.md](docs/scrutateur.md)). Pour l'infrastructure : contrôles statiques des scripts, des modèles et des remplacements effectués. Exécution PowerShell et installation Hyper-V non réalisées dans l'environnement de préparation Linux. Sur le PC de test, le script a créé les trois VM et SSH répond sur chacune ; le blocage rencontré venait du pilote réseau de VirtualBox installé sur l'hôte (voir « Dépannage SSH » de [Installation des VM](docs/installation_vm.md)). Restent à contrôler dans les VM : fin de cloud-init, nom d'hôte, réseau et résolution des noms (section « Validation Windows et invités »).
+Scrutateur et schéma PostgreSQL : 63 tests Python et un test SQL passent ; sur les VM de test, le scrutateur relève une vraie instance ASE (16.0 SP04 PL08), écrit dans PostgreSQL et Grafana affiche l'état, un blocage et son bloqueur (détail et reste à valider dans [docs/scrutateur.md](docs/scrutateur.md)). Pour l'infrastructure : contrôles statiques des scripts, des modèles et des remplacements effectués. Exécution PowerShell et installation Hyper-V non réalisées dans l'environnement de préparation Linux. Sur le PC de test, le script a créé les trois VM et SSH répond sur chacune ; le blocage rencontré venait du pilote réseau de VirtualBox installé sur l'hôte (voir « Dépannage SSH » de [Installation des VM](docs/installation_vm.md)). Restent à contrôler dans les VM : fin de cloud-init, nom d'hôte, réseau et résolution des noms (section « Validation Windows et invités »).

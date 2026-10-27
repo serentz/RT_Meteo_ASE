@@ -36,7 +36,7 @@ def mesure_ok():
 class TestStore(unittest.TestCase):
     def test_autant_de_parametres_que_de_marqueurs_pour_ok_et_erreur(self):
         attendu = SQL_ENREGISTRER.count("%s")
-        self.assertEqual(attendu, 11)
+        self.assertEqual(attendu, 12)
         self.assertEqual(len(parametres_enregistrement(mesure_ok())), attendu)
         self.assertEqual(len(parametres_enregistrement(Mesure(7, "erreur", 10, erreur="boom"))), attendu)
 
@@ -75,7 +75,7 @@ class TestStore(unittest.TestCase):
         Depot("dsn", connecter=lambda dsn: conn).enregistrer(mesure_ok())
         sql, params = conn.executes[0]
         self.assertIn("meteo.enregistrer_mesure", sql)
-        self.assertEqual(len(params), 11)
+        self.assertEqual(len(params), 12)
         self.assertTrue(conn.fermee)
 
 

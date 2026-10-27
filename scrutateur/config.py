@@ -54,8 +54,8 @@ class Reglages:
 
     @property
     def pire_duree_releve_s(self) -> int:
-        """Duree maximale d'un releve : connexion + une requete."""
-        return self.ase_login_timeout_s + self.ase_requete_timeout_s
+        """Duree maximale d'un releve : connexion + deux requetes (processus, transactions)."""
+        return self.ase_login_timeout_s + 2 * self.ase_requete_timeout_s
 
 
 def _nombre(env: Mapping[str, str], cle: str, defaut, type_):

@@ -105,6 +105,19 @@ SELECT pg_temp.verifie((SELECT execution_s IS NULL AND blocage_s IS NULL AND blo
 SELECT pg_temp.verifie((SELECT count(*) FROM meteo.processus p JOIN meteo.mesure m USING (mesure_id)
                         WHERE m.instance_id = pg_temp.id('t_erreur')) = 0, 'pas de processus pour un releve en erreur');
 
+-- Transactions ouvertes : enchainees a l'ecriture de la mesure, conservees pour un releve ok
+SELECT meteo.enregistrer_transactions(
+    meteo.enregistrer_mesure(pg_temp.id('t_orage'), 'ok', NULL, 1, 0, 0, 0, 0, 0, 0, '[]'),
+    '[{"spid":28,"login":"sa","hostname":"bastion","programme":"isql","hostprocess":"1803","cmd":"AWAITING COMMAND",
+       "statut":"recv sleep","debut":"2026-10-27 16:15:00","duree_s":28},
+      {"spid":31,"login":"app","duree_s":900,"debut":"2026-10-27 16:00:00"}]');
+SELECT pg_temp.verifie((SELECT count(*) FROM meteo.transaction_ouverte t JOIN meteo.derniere_mesure m USING (mesure_id)
+                        WHERE m.instance_id = pg_temp.id('t_orage')) = 2, '2 transactions conservees pour t_orage');
+SELECT pg_temp.verifie((SELECT (duree_s, debut) = (28, '2026-10-27 16:15:00'::timestamp) FROM meteo.transaction_ouverte t
+                        JOIN meteo.derniere_mesure m USING (mesure_id)
+                        WHERE m.instance_id = pg_temp.id('t_orage') AND spid = 28), 'duree et debut de transaction conserves');
+SELECT pg_temp.verifie(meteo.enregistrer_transactions(NULL, '[{"spid":1}]') IS NULL, 'mesure NULL : rien n''est ecrit');
+
 -- Purge
 UPDATE meteo.mesure SET collecte_le = now() - interval '40 days' WHERE instance_id = pg_temp.id('t_inactif');
 SELECT pg_temp.verifie(meteo.purger(30) = 1, 'purger(30) supprime exactement la mesure de 40 jours');
@@ -116,6 +129,7 @@ BEGIN
     PERFORM nom, host, port FROM meteo.instance;
     PERFORM * FROM meteo.etat_instance;
     PERFORM * FROM meteo.etat_indicateur;
+    PERFORM * FROM meteo.transaction_ouverte;
     BEGIN
         PERFORM password FROM meteo.instance;
         RAISE EXCEPTION 'ECHEC : grafana_ro lit password';
@@ -127,6 +141,10 @@ BEGIN
     BEGIN
         PERFORM meteo.enregistrer_mesure(1, 'ok', NULL, 1, 0, 0, 0, 0, 0, 0);
         RAISE EXCEPTION 'ECHEC : grafana_ro peut ecrire une mesure';
+    EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+    BEGIN
+        PERFORM meteo.enregistrer_transactions(1, '[]');
+        RAISE EXCEPTION 'ECHEC : grafana_ro peut ecrire des transactions';
     EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 RESET ROLE;

@@ -1,7 +1,7 @@
 import unittest
 
 from scrutateur.indicateurs import calculer_indicateurs
-from scrutateur.modeles import Lecture, LigneProcessus
+from scrutateur.modeles import Lecture, LigneProcessus, LigneTransaction
 
 
 def p(spid, bloqueur=0, blocage=None, exe=None, cmd="SELECT", statut="running", login="app"):
@@ -78,6 +78,12 @@ class TestIndicateurs(unittest.TestCase):
     def test_requete_active_de_moins_d_une_seconde_compte_comme_requete(self):
         r = calculer_indicateurs(Lecture([p(1, exe=0), p(2, exe=20)]))
         self.assertEqual((r.nb_requetes, r.requete_moyenne_s), (2, 10.0))
+
+    def test_transactions_triees_de_la_plus_longue_a_la_plus_courte_sans_effet_sur_les_indicateurs(self):
+        tr = [LigneTransaction(1, duree_s=30), LigneTransaction(2, duree_s=900), LigneTransaction(3, duree_s=120)]
+        r = calculer_indicateurs(Lecture([], tr))
+        self.assertEqual([t.spid for t in r.transactions], [2, 3, 1])
+        self.assertEqual((r.nb_bloques, r.nb_requetes, r.requete_max_s), (0, 0, 0.0))
 
     def test_moyenne_arrondie_a_une_decimale(self):
         r = calculer_indicateurs(Lecture([p(1, 9, 1), p(2, 9, 1), p(3, 9, 2)]))
