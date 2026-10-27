@@ -6,7 +6,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 3,
+  "version": 4,
   "refresh": "30s",
   "time": {
     "from": "now-6h",
@@ -276,7 +276,7 @@
           "format": "table",
           "rawQuery": true,
           "editorMode": "code",
-          "rawSql": "SELECT p.spid AS \"spid\", p.login AS \"Login\", p.hostname AS \"Hôte\", p.programme AS \"Programme\", p.hostprocess AS \"Process hôte\",\n       p.cmd AS \"Commande\", p.statut AS \"Statut\", p.bloqueur_spid AS \"Bloqué par\", p.blocage_s AS \"Blocage (s)\",\n       p.execution_s AS \"Requête (s)\"\nFROM meteo.processus p\nWHERE p.mesure_id = (SELECT dm.mesure_id FROM meteo.derniere_mesure dm JOIN meteo.instance i USING (instance_id)\n                     WHERE i.nom = '$instance')\nORDER BY p.blocage_s DESC NULLS LAST, p.execution_s DESC NULLS LAST, p.spid"
+          "rawSql": "WITH dernier AS (\n  SELECT dm.mesure_id FROM meteo.derniere_mesure dm JOIN meteo.instance i USING (instance_id)\n  WHERE i.nom = '$instance' AND dm.statut = 'ok'\n), t AS (\n  SELECT p.* FROM meteo.processus p JOIN dernier USING (mesure_id)\n)\nSELECT spid AS \"spid\", login AS \"Login\", hostname AS \"Hôte\", programme AS \"Programme\", hostprocess AS \"Process hôte\",\n       cmd AS \"Commande\", statut AS \"Statut\", bloqueur_spid AS \"Bloqué par\", blocage_s AS \"Blocage (s)\",\n       execution_s AS \"Requête (s)\"\nFROM t\nUNION ALL\nSELECT NULL, 'Aucune requête en cours ni blocage', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL\nWHERE EXISTS (SELECT 1 FROM dernier) AND NOT EXISTS (SELECT 1 FROM t)\nORDER BY \"Blocage (s)\" DESC NULLS LAST, \"Requête (s)\" DESC NULLS LAST, \"spid\""
         }
       ],
       "fieldConfig": {
@@ -286,10 +286,34 @@
             "cellOptions": {
               "type": "auto"
             }
-          },
-          "noValue": "Aucune requête en cours ni blocage"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Commande"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Login"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 130
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "showHeader": true,
