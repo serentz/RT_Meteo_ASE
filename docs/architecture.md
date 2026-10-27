@@ -16,7 +16,7 @@ Le scrutateur tourne sur le bastion et interroge chaque instance ASE **à distan
 
 ## Périmètre
 
-Le monitoring des deadlocks est **retiré du POC** : il n'y a plus de lecture du log ASE, de suivi de rotation ni de dédoublonnage d'événements. Cela permet de placer le script Python sur le bastion. Les indicateurs sont au nombre de quatre.
+Le monitoring des deadlocks est **retiré du POC** : il n'y a plus de lecture du log ASE, de suivi de rotation ni de dédoublonnage d'événements. Cela permet de placer le script Python sur le bastion. Les indicateurs sont au nombre de cinq.
 
 ## Collecte
 
@@ -45,7 +45,7 @@ Lignes retenues : requête en cours (`cmd` différent de `AWAITING COMMAND`, san
 
 **Réserves.** La requête a été validée sous `isql` par l'équipe sur une instance réelle en ASE 16.0 SP04 PL06, mais `execution_time` ne figure pas dans la page de documentation SAP de `sysprocesses` consultée : son sens (durée de la requête en cours, en millisecondes) a été constaté avec un `WAITFOR DELAY` sur ASE01 (PL08) ; la valeur 0 pour `AWAITING COMMAND` est celle indiquée par l'équipe. Les exclusions (`uid > 0`, « JOB SCHEDULER ») sont celles indiquées par l'équipe ; à vérifier qu'aucune autre tâche interne ne reste dans le tableau (points à valider dans `sql/ase/supervision.sql`).
 
-**Transactions ouvertes (seconde requête).** Sur la même connexion, une seconde requête lit `master..systransactions` et `master..sysprocesses` (`sql/ase/transactions.sql`, tables système, pas MDA) : une ligne par session ayant une transaction ouverte, avec l'heure de début et la durée en secondes, de la plus longue à la plus courte (50 lignes au plus). Elles sont conservées dans `meteo.transaction_ouverte` et affichées dans le détail, **sans indicateur ni seuil** : elles ne changent pas la couleur de l'instance. Une session inactive qui garde une transaction ouverte y apparaît donc, même si elle ne bloque personne. Le login de supervision doit pouvoir lire `master..systransactions` ; sinon le relevé échoue et l'instance passe en « inconnu » (erreur visible plutôt que transactions silencieusement absentes).
+**Transactions ouvertes (seconde requête).** Sur la même connexion, une seconde requête lit `master..systransactions` et `master..sysprocesses` (`sql/ase/transactions.sql`, tables système, pas MDA) : une ligne par session ayant une transaction ouverte, avec l'heure de début et la durée en secondes, de la plus longue à la plus courte (50 lignes au plus). Elles sont conservées dans `meteo.transaction_ouverte` et affichées dans le détail ; la plus longue alimente l'indicateur `transaction_max` (seuils 300 s / 900 s, provisoires) et peut donc changer la couleur de l'instance. Une session inactive qui garde une transaction ouverte y apparaît donc, même si elle ne bloque personne. Le login de supervision doit pouvoir lire `master..systransactions` ; sinon le relevé échoue et l'instance passe en « inconnu » (erreur visible plutôt que transactions silencieusement absentes).
 
 **Impact minimal sur les instances.** Le scrutateur ne lit aucune table de monitoring MDA (`mon*`) : elles sont utilisées par ASEMON et d'autres outils, et leur lecture peut perturber les compteurs de ces outils. Météo temps réel doit rester légère. Par relevé : une connexion, deux `SELECT` en lecture seule (`master..sysprocesses`, puis `master..systransactions`), en autocommit, puis fermeture. Aucune écriture, aucune table temporaire, aucune modification de la configuration d'ASE (l'option `enable monitoring` n'est pas nécessaire). Une seconde lecture de `master..systransactions` complète ce relevé (voir ci-dessus). Au plus un relevé par minute et par instance (si le précédent n'est pas terminé, le cycle est sauté), avec des délais de 10 s (connexion) et 15 s (requête). Cette règle prime sur l'ajout d'indicateurs : un indicateur qui exigerait les tables MDA est hors périmètre.
 
@@ -59,6 +59,7 @@ Lignes retenues : requête en cours (`cmd` différent de `AWAITING COMMAND`, san
 | Temps moyen blocage (`blocage_moyen`) | Moyenne sur les seuls processus actuellement bloqués | secondes |
 | Temps max requêtes (`requete_max`) | Maximum de `execution_time` des processus qui exécutent une commande (bloqués compris, `AWAITING COMMAND` exclu) | secondes |
 | Temps moyen requêtes (`requete_moyenne`) | Moyenne sur ces mêmes processus | secondes |
+| Temps max transactions (`transaction_max`) | Durée de la plus longue transaction ouverte du dernier relevé (`master..systransactions`, seconde requête) ; 0 s'il n'y en a aucune | secondes |
 
 Un relevé réussi sans blocage ni requête en cours donne zéro. Une mesure indisponible donne NULL et l'état « inconnu ». Le tableau lu est conservé tel quel dans `meteo.processus` à chaque relevé : requêtes actives, processus bloqués et bloqueurs, avec hôte, programme, login, commande, bloqueur et durées. Le bloqueur est identifiable même s'il est inactif.
 
@@ -74,6 +75,7 @@ Valeurs initiales **provisoires** (secondes), à ajuster selon la charge :
 | blocage moyen | 10 | 60 |
 | requête max | 60 | 300 |
 | requête moyenne | 120 | 300 |
+| transaction max | 300 | 900 |
 
 Les vues `meteo.etat_indicateur` (une ligne par instance et par indicateur : valeur, seuils, niveau) et `meteo.etat_instance` (une ligne par instance : pire niveau) alimentent l'affichage. Le niveau est `soleil`, `nuage`, `orage` ou `inconnu`.
 
@@ -85,7 +87,7 @@ Vue globale : une tuile cliquable par instance, avec son icône. Vue détail : u
 
 ## Acceptation fonctionnelle
 
-1. Instance sans anomalie : soleil et quatre valeurs valides.
+1. Instance sans anomalie : soleil et cinq valeurs valides.
 2. Blocage contrôlé : nuage puis orage aux seuils, avec bloqueur identifiable dans `meteo.processus`.
 3. Requête longue : sa durée (`execution_time`) apparaît dans le détail et dans les indicateurs requête max et moyenne, cohérente avec la durée lue sous `isql`.
 4. Instance injoignable, login refusé ou PostgreSQL indisponible : aucun faux soleil ; retour à la normale après reprise et relevé valide.

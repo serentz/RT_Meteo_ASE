@@ -19,7 +19,7 @@ Voir [Installation des VM](docs/installation_vm.md), [Scrutateur](docs/scrutateu
 ## Fonctionnement
 
 - Le scrutateur lit la table `meteo.instance` (nom, login, mot de passe) et, chaque minute, relève en parallèle toutes les instances actives.
-- Quatre indicateurs par instance : temps max et moyen de blocage, temps max et moyen des requêtes en cours. Ils sont tous calculés à partir d'un seul tableau lu sur `master..sysprocesses`. Le monitoring des deadlocks est retiré du POC.
+- Cinq indicateurs par instance : temps max et moyen de blocage, temps max et moyen des requêtes en cours (calculés sur un tableau lu dans `master..sysprocesses`), et temps max des transactions ouvertes (`master..systransactions`). Le monitoring des deadlocks est retiré du POC.
 - Chaque indicateur est comparé à des seuils (warning / alarme) : soleil, nuage, orage ; « inconnu » (lune) si la mesure manque ou est périmée. L'instance affiche son pire niveau.
 
 ## Organisation

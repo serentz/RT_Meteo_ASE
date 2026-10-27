@@ -94,7 +94,8 @@ INSERT INTO meteo.indicateur (code, libelle, unite, ordre) VALUES
     ('blocage_max',        'Temps max blocage',        's', 1),
     ('blocage_moyen',      'Temps moyen blocage',      's', 2),
     ('requete_max',        'Temps max requêtes',       's', 3),
-    ('requete_moyenne',    'Temps moyen requêtes',     's', 4)
+    ('requete_moyenne',    'Temps moyen requêtes',     's', 4),
+    ('transaction_max',    'Temps max transactions',   's', 5)
 ON CONFLICT (code) DO NOTHING;
 
 -- Seuils : valeur < warning : soleil ; warning <= valeur < alarme : nuage ; valeur >= alarme : orage.
@@ -112,7 +113,8 @@ INSERT INTO meteo.seuil (instance_id, indicateur, warning, alarme) VALUES
     (NULL, 'blocage_max',     30, 120),
     (NULL, 'blocage_moyen',   10,  60),
     (NULL, 'requete_max',     60, 300),
-    (NULL, 'requete_moyenne', 120, 300)
+    (NULL, 'requete_moyenne', 120, 300),
+    (NULL, 'transaction_max', 300, 900)
 ON CONFLICT (instance_id, indicateur) DO NOTHING;
 
 -- Parametres. peremption_s : au-dela, un releve est considere perime (3 cycles de 60 s).
@@ -223,7 +225,11 @@ WITH dm AS (
         ('blocage_max',         d.blocage_max_s),
         ('blocage_moyen',       d.blocage_moyen_s),
         ('requete_max',         d.requete_max_s),
-        ('requete_moyenne',     d.requete_moyenne_s)
+        ('requete_moyenne',     d.requete_moyenne_s),
+        -- Duree de la plus longue transaction ouverte du dernier releve (0 s'il n'y en a aucune ; NULL sans releve ok)
+        ('transaction_max',     CASE WHEN d.statut = 'ok'
+                                     THEN COALESCE((SELECT max(t.duree_s) FROM meteo.transaction_ouverte t
+                                                    WHERE t.mesure_id = d.mesure_id), 0) END)
     ) AS v(code, valeur)
     WHERE i.actif
 )

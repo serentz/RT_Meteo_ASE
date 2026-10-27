@@ -393,7 +393,7 @@ sudo -u postgres psql -d meteo -v ON_ERROR_STOP=1 -f /tmp/sql/postgresql/001_sch
 sudo -u postgres psql -d meteo -v ON_ERROR_STOP=1 -c "GRANT EXECUTE ON FUNCTION meteo.enregistrer_transactions(bigint, jsonb) TO scrutateur; GRANT SELECT ON meteo.transaction_ouverte TO grafana_ro;"
 ```
 
-`001_schema.sql` peut être rejoué sans risque (il ne supprime rien) ; les messages « already exists, skipping » sont normaux. Mettre ensuite à jour le scrutateur sur le bastion (`git pull`, puis la copie de la section 3.2 et `sudo systemctl restart scrutateur`) et les tableaux de bord Grafana (section 4.2). Le login ASE de supervision doit pouvoir lire `master..systransactions` (essai : `sql/ase/transactions.sql` sous `isql` avec ce login).
+`001_schema.sql` peut être rejoué sans risque (il ne supprime rien) ; les messages « already exists, skipping » sont normaux. Le même rejeu ajoute l'indicateur `transaction_max` (seuils 300 s / 900 s) : aucune autre commande n'est nécessaire pour lui. Mettre ensuite à jour le scrutateur sur le bastion (`git pull`, puis la copie de la section 3.2 et `sudo systemctl restart scrutateur`) et les tableaux de bord Grafana (section 4.2). Le login ASE de supervision doit pouvoir lire `master..systransactions` (essai : `sql/ase/transactions.sql` sous `isql` avec ce login).
 
 ## Réglages
 

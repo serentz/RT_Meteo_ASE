@@ -118,6 +118,22 @@ SELECT pg_temp.verifie((SELECT (duree_s, debut) = (28, '2026-10-27 16:15:00'::ti
                         WHERE m.instance_id = pg_temp.id('t_orage') AND spid = 28), 'duree et debut de transaction conserves');
 SELECT pg_temp.verifie(meteo.enregistrer_transactions(NULL, '[{"spid":1}]') IS NULL, 'mesure NULL : rien n''est ecrit');
 
+-- Indicateur transaction_max : plus longue transaction ouverte du dernier releve (seuils par defaut 300 / 900)
+SELECT pg_temp.verifie(pg_temp.niveau_ind('t_orage', 'transaction_max') = 'orage', '900 s >= alarme 900 : orage (transaction_max)');
+SELECT pg_temp.verifie((SELECT valeur FROM meteo.etat_indicateur WHERE instance = 't_orage' AND indicateur = 'transaction_max') = 900,
+                       'transaction_max = la plus longue des transactions (900, pas 28)');
+SELECT pg_temp.verifie((SELECT valeur FROM meteo.etat_indicateur WHERE instance = 't_nuage' AND indicateur = 'transaction_max') = 0,
+                       'aucune transaction : transaction_max vaut 0, pas NULL');
+SELECT pg_temp.verifie(pg_temp.niveau_ind('t_nuage', 'transaction_max') = 'soleil', 'aucune transaction : soleil');
+SELECT meteo.enregistrer_transactions(
+    meteo.enregistrer_mesure(pg_temp.id('t_ok'), 'ok', NULL, 1, 0, 0, 0, 0, 0, 0, '[]'), '[{"spid":5,"duree_s":299}]');
+SELECT pg_temp.verifie(pg_temp.niveau_ind('t_ok', 'transaction_max') = 'soleil', '299 s < warning 300 : soleil');
+SELECT meteo.enregistrer_transactions(
+    meteo.enregistrer_mesure(pg_temp.id('t_ok'), 'ok', NULL, 1, 0, 0, 0, 0, 0, 0, '[]'), '[{"spid":5,"duree_s":300}]');
+SELECT pg_temp.verifie(pg_temp.niveau_ind('t_ok', 'transaction_max') = 'nuage', '300 s >= warning 300 : nuage');
+SELECT pg_temp.verifie(pg_temp.niveau_ind('t_erreur', 'transaction_max') = 'inconnu', 'releve en erreur : transaction_max inconnu');
+SELECT pg_temp.verifie(pg_temp.niveau_ind('t_vide', 'transaction_max') = 'inconnu', 'jamais releve : transaction_max inconnu');
+
 -- Purge
 UPDATE meteo.mesure SET collecte_le = now() - interval '40 days' WHERE instance_id = pg_temp.id('t_inactif');
 SELECT pg_temp.verifie(meteo.purger(30) = 1, 'purger(30) supprime exactement la mesure de 40 jours');
