@@ -343,7 +343,8 @@ Les tableaux de bord demandent Grafana 10.4 ou plus récent (cellules « image �
 
 ```bash
 cd ~/RT_Meteo_ASE
-sudo mkdir -p /var/lib/grafana/dashboards/meteo /usr/share/grafana/public/img/meteo
+sudo mkdir -p /var/lib/grafana/dashboards/meteo /usr/share/grafana/public/img/meteo \
+  /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards
 sudo cp grafana/dashboards/*.json /var/lib/grafana/dashboards/meteo/
 sudo cp grafana/provisioning/datasources/meteo.yaml /etc/grafana/provisioning/datasources/
 sudo cp grafana/provisioning/dashboards/meteo.yaml /etc/grafana/provisioning/dashboards/
