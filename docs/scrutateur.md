@@ -101,7 +101,7 @@ psql -d meteo_test -v ON_ERROR_STOP=1 -f tests/postgresql/test_schema.sql
 
 Réalisé dans l'environnement de préparation (Linux) :
 
-- 47 tests Python (calculs sur le tableau, lecture ASE avec un faux pilote, parallélisme, panne d'une instance, instance bloquée non relancée, relecture de `meteo.instance`, panne de PostgreSQL, mot de passe masqué, cohérence entre la requête, le fichier SQL et le schéma) ;
+- 49 tests Python (calculs sur le tableau, lecture ASE avec un faux pilote, parallélisme, panne d'une instance, instance bloquée non relancée, relecture de `meteo.instance`, panne de PostgreSQL, mot de passe masqué, cohérence entre la requête, le fichier SQL et le schéma) ;
 - schéma, vues, fonction d'écriture et droits des rôles testés sur un vrai PostgreSQL 16 ;
 - code du scrutateur exécuté de bout en bout contre ce PostgreSQL, avec une instance ASE simulée.
 
