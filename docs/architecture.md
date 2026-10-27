@@ -38,10 +38,10 @@ Intervalle : 60 secondes (`SCRUTATEUR_INTERVALLE_S`), cadence fixe sans dérive.
 **Source ASE : une seule requête** sur `master..sysprocesses` (texte dans `sql/ase/supervision.sql`). Elle rend un tableau, lu en mémoire par le scrutateur ; c'est de ce tableau que sont calculés tous les indicateurs et que vient le détail des processus. Colonnes :
 
 - `blocked` : spid du bloqueur, 0 si le processus n'est pas bloqué ; `time_blocked` : durée du blocage **en secondes**.
-- `execution_time` : durée de la requête en cours **en secondes**.
+- `execution_time` : durée de la requête en cours **en secondes** ; vaut 0 (et non NULL) pour une session `AWAITING COMMAND`.
 - l'identité du processus : `spid`, `uid`, login (`suser_name(suid)`), `status`, `hostname`, `program_name`, `hostprocess`, `cmd`.
 
-Lignes retenues : requête en cours, ou bloqué, ou **bloqueur** d'un autre processus (un bloqueur est souvent inactif ; sans cette clause il ne figurerait pas dans le tableau et resterait anonyme). Sont exclus : la connexion du scrutateur (`@@spid`) les processus dont `uid <= 0` et le processus interne d'ASE de `program_name` « JOB SCHEDULER » (les sessions sans `program_name` sont conservées).
+Lignes retenues : requête en cours (`cmd` différent de `AWAITING COMMAND`, sans quoi toutes les sessions inactives rempliraient le tableau), ou bloqué, ou **bloqueur** d'un autre processus (un bloqueur est souvent inactif ; sans cette clause il ne figurerait pas dans le tableau et resterait anonyme). Sont exclus : la connexion du scrutateur (`@@spid`) les processus dont `uid <= 0` et le processus interne d'ASE de `program_name` « JOB SCHEDULER » (les sessions sans `program_name` sont conservées).
 
 **Réserves.** La requête a été validée sous `isql` par l'équipe sur une instance réelle en ASE 16.0 SP04 PL06, mais `execution_time` ne figure pas dans la page de documentation SAP de `sysprocesses` consultée : son sens (secondes de la requête en cours) est celui indiqué par l'équipe, à confirmer avec une requête longue (`WAITFOR DELAY`). Les exclusions (`uid > 0`, « JOB SCHEDULER ») sont celles indiquées par l'équipe ; à vérifier qu'aucune autre tâche interne ne reste dans le tableau (points à valider dans `sql/ase/supervision.sql`).
 
@@ -57,7 +57,7 @@ Lignes retenues : requête en cours, ou bloqué, ou **bloqueur** d'un autre proc
 |---|---|---|
 | Temps max blocage (`blocage_max`) | Maximum de `time_blocked` des processus actuellement bloqués (`blocked <> 0`) | secondes |
 | Temps moyen blocage (`blocage_moyen`) | Moyenne sur les seuls processus actuellement bloqués | secondes |
-| Temps max requêtes (`requete_max`) | Maximum de `execution_time` des processus ayant une requête en cours (bloqués compris) | secondes |
+| Temps max requêtes (`requete_max`) | Maximum de `execution_time` des processus qui exécutent une commande (bloqués compris, `AWAITING COMMAND` exclu) | secondes |
 | Temps moyen requêtes (`requete_moyenne`) | Moyenne sur ces mêmes processus | secondes |
 
 Un relevé réussi sans blocage ni requête en cours donne zéro. Une mesure indisponible donne NULL et l'état « inconnu ». Le tableau lu est conservé tel quel dans `meteo.processus` à chaque relevé : requêtes actives, processus bloqués et bloqueurs, avec hôte, programme, login, commande, bloqueur et durées. Le bloqueur est identifiable même s'il est inactif.

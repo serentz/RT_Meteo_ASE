@@ -20,7 +20,8 @@ SQL_PROCESSUS = """\
 SELECT p.spid, p.uid, suser_name(p.suid), p.status, p.hostname, p.program_name, p.hostprocess,
        p.cmd, p.blocked, p.time_blocked, p.execution_time
 FROM master..sysprocesses p
-WHERE (p.execution_time IS NOT NULL OR p.time_blocked IS NOT NULL
+WHERE ((p.execution_time IS NOT NULL AND isnull(p.cmd, '') <> 'AWAITING COMMAND')
+       OR p.time_blocked IS NOT NULL
        OR p.spid IN (SELECT b.blocked FROM master..sysprocesses b WHERE b.blocked <> 0))
   AND p.uid > 0 AND isnull(p.program_name, '') <> 'JOB SCHEDULER' AND p.spid <> @@spid"""
 

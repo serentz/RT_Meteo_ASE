@@ -13,7 +13,7 @@ REGLAGES = Reglages(pg_dsn="postgresql://x")
 # spid, uid, login, status, hostname, program_name, hostprocess, cmd, blocked, time_blocked, execution_time
 LIGNE_ACTIVE = (2190, 2, "app_svc ", "running", "srv1", "isql", "4062306", "SELECT", 0, None, 4)
 LIGNE_BLOQUEE = (2200, 7, "batch", "lock sleep", "srv2", "appli", "99", "UPDATE", 2210, 45, 120.0)
-LIGNE_BLOQUEUR = (2210, 7, "batch", "sleeping", "srv2", "appli", "98", "AWAITING COMMAND", 0, None, None)
+LIGNE_BLOQUEUR = (2210, 7, "batch", "sleeping", "srv2", "appli", "98", "AWAITING COMMAND", 0, None, 0)
 
 
 class FauxCurseur:
@@ -57,7 +57,7 @@ class TestLigneProcessus(unittest.TestCase):
         bloquee = ase.ligne_processus(LIGNE_BLOQUEE)
         self.assertEqual((bloquee.bloqueur_spid, bloquee.blocage_s, bloquee.execution_s), (2210, 45, 120))
         bloqueur = ase.ligne_processus(LIGNE_BLOQUEUR)
-        self.assertEqual((bloqueur.bloqueur_spid, bloqueur.blocage_s, bloqueur.execution_s), (0, None, None))
+        self.assertEqual((bloqueur.bloqueur_spid, bloqueur.blocage_s, bloqueur.execution_s), (0, None, 0))
 
     def test_valeurs_null_d_ase(self):
         lp = ase.ligne_processus((5, None, None, None, None, None, None, None, None, None, None))

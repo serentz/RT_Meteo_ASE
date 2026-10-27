@@ -37,6 +37,9 @@ class TestCoherence(unittest.TestCase):
         requetes = "\n".join(l for l in fichier.splitlines() if not l.lstrip().startswith("--"))
         self.assertNotRegex(requetes.lower(), r"\bmon[a-z]+\b")
 
+    def test_la_requete_ne_retient_pas_les_sessions_inactives(self):
+        self.assertIn("isnull(p.cmd, '') <> 'AWAITING COMMAND'", SQL_PROCESSUS)
+
     def test_la_requete_exclut_la_session_du_scrutateur(self):
         self.assertIn("@@spid", SQL_PROCESSUS)
 

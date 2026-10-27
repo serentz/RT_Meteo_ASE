@@ -8,10 +8,11 @@
 -- Colonnes lues dans master..sysprocesses :
 --   blocked        spid du processus bloqueur, 0 si le processus n'est pas bloque
 --   time_blocked   duree du blocage, en secondes (NULL si le processus n'est pas bloque)
---   execution_time duree de la requete en cours, en secondes (NULL si aucune requete en cours)
+--   execution_time duree de la requete en cours, en secondes ; vaut 0 (et non NULL) pour une session AWAITING COMMAND
 --   uid            identifiant d'utilisateur dans la base courante du processus
--- Lignes retenues : requete en cours OU bloque OU bloqueur d'un autre processus (le bloqueur est souvent
--- inactif : sans cette clause il ne serait pas dans le tableau et resterait anonyme).
+-- Lignes retenues : requete en cours (cmd <> 'AWAITING COMMAND' : sans cela toutes les sessions inactives, dont
+-- execution_time vaut 0, rempliraient le tableau) OU bloque OU bloqueur d'un autre processus (le bloqueur est
+-- souvent inactif : sans cette clause il ne serait pas dans le tableau et resterait anonyme).
 --
 -- Origine : requete validee sous isql par l'utilisateur sur une instance reelle, ASE 16.0 SP04 PL06
 -- (colonne execution_time presente). Exclusions voulues : uid > 0 (taches systeme) et le processus interne
@@ -31,7 +32,8 @@
 SELECT p.spid, p.uid, suser_name(p.suid), p.status, p.hostname, p.program_name, p.hostprocess,
        p.cmd, p.blocked, p.time_blocked, p.execution_time
 FROM master..sysprocesses p
-WHERE (p.execution_time IS NOT NULL OR p.time_blocked IS NOT NULL
+WHERE ((p.execution_time IS NOT NULL AND isnull(p.cmd, '') <> 'AWAITING COMMAND')
+       OR p.time_blocked IS NOT NULL
        OR p.spid IN (SELECT b.blocked FROM master..sysprocesses b WHERE b.blocked <> 0))
   AND p.uid > 0 AND isnull(p.program_name, '') <> 'JOB SCHEDULER' AND p.spid <> @@spid
 go

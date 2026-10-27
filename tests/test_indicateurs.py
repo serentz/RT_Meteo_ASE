@@ -66,6 +66,19 @@ class TestIndicateurs(unittest.TestCase):
         r = calculer_indicateurs(Lecture([p(30, exe=1), p(10, exe=2), p(20, exe=3)]))
         self.assertEqual([d.spid for d in r.details], [10, 20, 30])
 
+    def test_session_inactive_awaiting_command_a_zero_n_entre_pas_dans_les_requetes(self):
+        # ASE renvoie execution_time = 0 (pas NULL) pour une session AWAITING COMMAND
+        inactives = [p(1, cmd="AWAITING COMMAND", statut="sleeping", exe=0), p(2, cmd="awaiting command ", exe=0)]
+        r = calculer_indicateurs(Lecture(inactives + [p(3, exe=30), p(4, exe=10)]))
+        self.assertEqual(r.nb_requetes, 2)
+        self.assertEqual(r.requete_max_s, 30.0)
+        self.assertEqual(r.requete_moyenne_s, 20.0)  # sans dilution par les sessions inactives
+        self.assertEqual(len(r.details), 4)  # elles restent dans le tableau conserve
+
+    def test_requete_active_de_moins_d_une_seconde_compte_comme_requete(self):
+        r = calculer_indicateurs(Lecture([p(1, exe=0), p(2, exe=20)]))
+        self.assertEqual((r.nb_requetes, r.requete_moyenne_s), (2, 10.0))
+
     def test_moyenne_arrondie_a_une_decimale(self):
         r = calculer_indicateurs(Lecture([p(1, 9, 1), p(2, 9, 1), p(3, 9, 2)]))
         self.assertEqual(r.blocage_moyen_s, 1.3)
