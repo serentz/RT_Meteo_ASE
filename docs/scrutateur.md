@@ -334,6 +334,7 @@ Variables de `/etc/scrutateur/scrutateur.env` (valeurs par défaut entre parenth
 | `Connection refused` (port 5432) | bastion | `listen_addresses` non appliqué ou PostgreSQL non redémarré : refaire 1.3 et vérifier avec `sudo ss -tlnp \| grep 5432` sur pg01. |
 | `no pg_hba.conf entry for host` | bastion | Ligne `host meteo scrutateur 192.168.50.10/32 ...` absente de `pg_hba.conf` : refaire 1.3. |
 | `password authentication failed for user "scrutateur"` | bastion | `MOT_DE_PASSE_1` différent de celui donné à `002_roles.sql`, ou caractère spécial non encodé dans `scrutateur.env`. |
+| `Connexion a PostgreSQL impossible (OperationalError)` ou `failed to resolve host 'xxx@pg01'` | bastion | Le mot de passe contient un caractère spécial (`@`, `:`, `/`, `#`, `%`, `?`) : dans l'URL il doit être encodé (`@` devient `%40`). Obtenir la forme encodée : `python3 -c "import urllib.parse,getpass;print(urllib.parse.quote(getpass.getpass(),safe=''))"` puis coller le résultat dans `scrutateur.env`. Le plus simple : choisir un mot de passe sans caractère spécial. |
 | `could not translate host name "pg01"` | bastion | Résolution de nom : remplacer `pg01` par `192.168.50.11` dans la commande ou dans `scrutateur.env`. |
 | `Can't open lib 'FreeTDS'` | bastion | Paquet `tdsodbc` absent, ou pilote non déclaré dans `/etc/odbcinst.ini` : régler `SCRUTATEUR_ODBC_PILOTE` sur le nom qui y figure. |
 | `Login timeout expired`, `Unable to connect` | bastion | Réseau, port 5000, `interfaces` d'ASE qui n'écoute pas sur le réseau, nom non résolu. Essayer 2.2 puis 2.3. |

@@ -65,7 +65,13 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _tester(nom: str, depot: Depot, source) -> int:
-    instances = {i.nom: i for i in depot.lire_instances()}
+    try:
+        instances = {i.nom: i for i in depot.lire_instances()}
+    except Exception as exc:  # noqa: BLE001
+        # Le texte de l'exception n'est pas affiche : une URL mal formee peut y laisser un morceau du mot de passe.
+        journal.error("Connexion a PostgreSQL impossible (%s). Verifier SCRUTATEUR_PG_DSN : hote, mot de passe, et "
+                      "caracteres speciaux du mot de passe a ecrire en %%XX (docs/scrutateur.md 3.3).", type(exc).__name__)
+        return 1
     if nom not in instances:
         journal.error("Instance %r absente ou inactive dans meteo.instance (connues : %s)", nom, ", ".join(sorted(instances)) or "aucune")
         return 1
