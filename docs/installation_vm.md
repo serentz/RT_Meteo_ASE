@@ -67,6 +67,8 @@ Causes les plus probables quand `ssh admin01@192.168.50.x` ne fonctionne pas, de
 5. **Nom de carte.** Le modèle Ubuntu suppose `eth0`. Si la carte porte un autre nom, l'IP statique n'est pas appliquée : en console, `ip -br address` puis `ls /sys/class/net`.
 6. **Authentification.** Le port 22 répond mais `Permission denied` : vérifier le mot de passe saisi (caractères autorisés listés dans le script) et, si une clé publique était détectée, qu'elle est bien celle de l'agent SSH utilisé.
 
+7. **Pilote réseau d'un autre produit de virtualisation sur l'hôte (VirtualBox).** Symptôme observé : le ping des VM répond, mais toute connexion TCP depuis l'hôte (port 22, SSH) reste sans réponse jusqu'au délai dépassé, et une capture dans la VM (`tcpdump`) ne voit arriver aucune demande de connexion ; entre VM, SSH fonctionne. Le pilote `VirtualBox NDIS6 Bridged Networking Driver` était lié à toutes les cartes de l'hôte, `vEthernet` comprises (`Get-NetAdapterBinding -AllBindings | Where-Object { $_.Enabled -and $_.ComponentID -notlike 'ms_*' }`). Sur le PC de test, tout est rentré dans l'ordre après désinstallation de VirtualBox, `create_vms.ps1 -Destroy`, puis recréation des VM. Le pare-feu Windows, le pare-feu G DATA, la recréation du commutateur et la désactivation de ses extensions n'étaient pas en cause. Non vérifié : si la simple désactivation de la liaison VirtualBox, sans désinstaller le produit, suffit.
+
 Un port 22 qui répond avec une bannière `SSH-2.0-OpenSSH...` prouve que sshd tourne et que le réseau est correct ; le reste relève de l'authentification.
 
 ## Recréation volontaire
