@@ -111,8 +111,16 @@ foreach ($v in $vms) {
     }
 
     if ($TrySsh -and $banner -and $hasSsh) {
-        $out = & ssh -o BatchMode=yes -o ConnectTimeout=5 "$AdminUser@$ip" hostname 2>&1
-        Write-Host ("     ssh {0}@{1} -> {2}" -f $AdminUser, $ip, (($out | Out-String).Trim()))
+        # Les erreurs de ssh sont lues comme du texte (sinon PowerShell les affiche comme une exception).
+        $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        try { $out = (& ssh -o BatchMode=yes -o ConnectTimeout=5 "$AdminUser@$ip" hostname 2>&1 | ForEach-Object { "$_" }) -join ' ' }
+        finally { $ErrorActionPreference = $old }
+        $out = $out.Trim()
+        if     ($out -match 'REMOTE HOST IDENTIFICATION HAS CHANGED') { $msg = "cle d'hote differente de known_hosts (VM recreee) : ssh-keygen -R $ip, puis ssh a la main" }
+        elseif ($out -match 'Host key verification failed')          { $msg = "cle d'hote pas encore connue (normal a la 1re connexion) : lancer ssh $AdminUser@$ip a la main, verifier l'empreinte, repondre yes" }
+        elseif ($out -match 'Permission denied')                      { $msg = 'sshd repond, authentification refusee sans mot de passe (normal sans cle SSH)' }
+        else                                                          { $msg = $out }
+        Write-Host ("     ssh {0}@{1} -> {2}" -f $AdminUser, $ip, $msg)
     }
 }
 
