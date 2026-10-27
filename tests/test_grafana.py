@@ -18,8 +18,8 @@ def requetes(db):
 class TestGrafana(unittest.TestCase):
     def test_deux_tableaux_de_bord_json_valides_avec_uid_unique(self):
         dbs = tableaux_de_bord()
-        self.assertEqual(sorted(dbs), ["detail.json", "synthese.json"])
-        self.assertEqual(len({d["uid"] for d in dbs.values()}), 2)
+        self.assertEqual(sorted(dbs), ["detail.json", "liste.json", "synthese.json"])
+        self.assertEqual(len({d["uid"] for d in dbs.values()}), 3)
 
     def test_les_liens_pointent_vers_les_uid_existants(self):
         dbs = tableaux_de_bord()

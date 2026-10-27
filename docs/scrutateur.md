@@ -339,6 +339,15 @@ grafana-server --version
 
 Les tableaux de bord demandent Grafana 10.4 ou plus récent (cellules « image » des tableaux, source `grafana-postgresql-datasource`).
 
+La synthèse en tuiles (icône, nom dessous) utilise le greffon Grafana « Business Text » :
+
+```bash
+sudo grafana cli plugins install marcusolsson-dynamictext-panel
+sudo systemctl restart grafana-server
+```
+
+Sans ce greffon, l'écran « Météo des instances ASE » affiche une erreur de panneau ; utiliser alors l'écran « (liste) », qui n'en a pas besoin. Le greffon 6.x demande Grafana 11 ou 12, le 5.x Grafana 10 ou 11 (le dépôt du greffon est archivé depuis septembre 2025).
+
 ### 4.2 Déployer la configuration du dépôt
 
 ```bash
@@ -369,7 +378,8 @@ systemctl status grafana-server
 
 Depuis le navigateur du PC Windows : `http://192.168.50.10:3000`. Premier accès : utilisateur `admin`, mot de passe `admin`, que Grafana demande de changer. Menu *Dashboards* :
 
-- **Météo des instances ASE** : une ligne par instance, avec son icône (soleil, nuage, orage, lune), son état, l'âge du relevé et l'éventuelle erreur. Un clic sur le nom ouvre le détail. Rafraîchi toutes les 30 s.
+- **Météo des instances ASE** : une tuile par instance avec son icône (soleil, nuage, orage, lune) et son nom en dessous, bordure de la couleur de l'état, âge du relevé. Un clic ouvre le détail. Rafraîchi toutes les 30 s.
+- **Météo des instances ASE (liste)** : la même synthèse en tableau, sans greffon (secours).
 - **Détail d'une instance ASE** : choisir l'instance en haut ; état, un indicateur par ligne (valeur, unité, seuils, icône) et le tableau des processus du dernier relevé (requêtes en cours, bloqués avec leur bloqueur).
 
 Si les tableaux sont vides ou en erreur : *Connections → Data sources → meteo → Save & test*. Une erreur d'authentification vient de `METEO_GRAFANA_PWD` ou de la ligne `grafana_ro` dans `pg_hba.conf` (1.3) ; `sudo journalctl -u grafana-server -n 30 --no-pager` donne le détail.

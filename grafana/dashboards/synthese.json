@@ -6,17 +6,31 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "time": {
     "from": "now-6h",
     "to": "now"
   },
+  "links": [
+    {
+      "title": "Liste",
+      "type": "link",
+      "url": "/d/meteo-liste",
+      "icon": "dashboard"
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
   "panels": [
     {
       "id": 1,
-      "type": "table",
-      "title": "Une ligne par instance : soleil = OK, nuage = attention, orage = alarme, lune = inconnu",
+      "type": "marcusolsson-dynamictext-panel",
+      "title": "Soleil = OK, nuage = attention, orage = alarme, lune = inconnu",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "meteo-pg"
@@ -37,112 +51,20 @@
           "format": "table",
           "rawQuery": true,
           "editorMode": "code",
-          "rawSql": "SELECT '/public/img/meteo/' || CASE niveau WHEN 'soleil' THEN 'Soleil.png' WHEN 'nuage' THEN 'nuages.png' WHEN 'orage' THEN 'orages.png' ELSE 'lune_dors.png' END AS \"Météo\",\n       instance AS \"Instance\", niveau AS \"Etat\", statut AS \"Relevé\",\n       age_s AS \"Âge du relevé (s)\", erreur AS \"Erreur\"\nFROM meteo.etat_instance ORDER BY instance"
+          "rawSql": "SELECT '/public/img/meteo/' || CASE niveau WHEN 'soleil' THEN 'Soleil.png' WHEN 'nuage' THEN 'nuages.png'\n       WHEN 'orage' THEN 'orages.png' ELSE 'lune_dors.png' END AS icone,\n       instance, niveau, age_s, erreur\nFROM meteo.etat_instance ORDER BY instance"
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            }
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Météo"
-            },
-            "properties": [
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "image",
-                  "alt": "météo",
-                  "title": "météo"
-                }
-              },
-              {
-                "id": "custom.width",
-                "value": 110
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Etat"
-            },
-            "properties": [
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-text"
-                }
-              },
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "value",
-                    "options": {
-                      "soleil": {
-                        "text": "soleil",
-                        "color": "green",
-                        "index": 0
-                      },
-                      "nuage": {
-                        "text": "nuage",
-                        "color": "orange",
-                        "index": 1
-                      },
-                      "orage": {
-                        "text": "orage",
-                        "color": "red",
-                        "index": 2
-                      },
-                      "inconnu": {
-                        "text": "inconnu",
-                        "color": "purple",
-                        "index": 3
-                      }
-                    }
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Instance"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "title": "Détail de ${__value.raw}",
-                    "url": "/d/meteo-detail?var-instance=${__value.raw}"
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      },
       "options": {
-        "showHeader": true,
-        "cellHeight": "lg"
+        "renderMode": "allRows",
+        "content": "<div class=\"tuiles\">\n{{#each data}}\n  <a class=\"tuile {{niveau}}\" href=\"/d/meteo-detail?var-instance={{instance}}\">\n    <img src=\"{{icone}}\" alt=\"{{niveau}}\">\n    <div class=\"nom\">{{instance}}</div>\n    <div class=\"detail\">{{niveau}} - relevé il y a {{age_s}} s</div>\n  </a>\n{{/each}}\n</div>",
+        "defaultContent": "Aucune instance active dans meteo.instance.",
+        "styles": ".tuiles { display: flex; flex-wrap: wrap; gap: 16px; padding: 8px; }\n.tuile { display: flex; flex-direction: column; align-items: center; width: 170px; padding: 14px 8px;\n         border: 2px solid #666; border-radius: 10px; text-decoration: none; color: inherit; }\n.tuile:hover { background: rgba(128,128,128,.15); }\n.tuile img { width: 96px; height: 96px; object-fit: contain; }\n.tuile .nom { margin-top: 8px; font-size: 1.2em; font-weight: 600; }\n.tuile .detail { font-size: .8em; opacity: .8; }\n.tuile.soleil { border-color: #3cb371; } .tuile.nuage { border-color: #f5a623; }\n.tuile.orage { border-color: #e03b3b; } .tuile.inconnu { border-color: #8e6bbf; }",
+        "helpers": "",
+        "afterRender": "",
+        "contentPartials": [],
+        "externalStyles": [],
+        "wrap": true
       }
     }
-  ],
-  "templating": {
-    "list": []
-  },
-  "annotations": {
-    "list": []
-  }
+  ]
 }
