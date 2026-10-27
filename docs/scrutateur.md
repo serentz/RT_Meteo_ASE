@@ -322,6 +322,57 @@ sudo -u postgres psql -d meteo -c "SELECT * FROM meteo.etat_instance"
 
 Pour voir les indicateurs de chaque instance, remplacer `meteo.etat_instance` par `meteo.etat_indicateur`.
 
+## 4. Grafana sur le bastion (écrans soleil / nuage / orage)
+
+Tout se tape **sur le bastion** (`ssh admin01@192.168.50.10`), à partir du dossier cloné en 3.1 (`~/RT_Meteo_ASE`, à mettre à jour avec `git pull`). Non testé sur les VM au moment de l'écriture : à valider et à corriger ici si besoin.
+
+### 4.1 Installer Grafana
+
+```bash
+sudo apt-get install -y apt-transport-https wget gpg
+sudo mkdir -p /etc/apt/keyrings
+wget -q -O - https://apt.grafana.com/gpg.key | gpg --dearmor | sudo tee /etc/apt/keyrings/grafana.gpg > /dev/null
+echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main" | sudo tee /etc/apt/sources.list.d/grafana.list
+sudo apt-get update && sudo apt-get install -y grafana
+grafana-server --version
+```
+
+Les tableaux de bord demandent Grafana 10.4 ou plus récent (cellules « image » des tableaux, source `grafana-postgresql-datasource`).
+
+### 4.2 Déployer la configuration du dépôt
+
+```bash
+cd ~/RT_Meteo_ASE
+sudo mkdir -p /var/lib/grafana/dashboards/meteo /usr/share/grafana/public/img/meteo
+sudo cp grafana/dashboards/*.json /var/lib/grafana/dashboards/meteo/
+sudo cp grafana/provisioning/datasources/meteo.yaml /etc/grafana/provisioning/datasources/
+sudo cp grafana/provisioning/dashboards/meteo.yaml /etc/grafana/provisioning/dashboards/
+sudo cp images/iconnes/*.png /usr/share/grafana/public/img/meteo/
+```
+
+Les icônes sont servies par Grafana sous `/public/img/meteo/` (à recopier après une mise à jour du paquet Grafana).
+
+### 4.3 Donner à Grafana le mot de passe du rôle `grafana_ro`
+
+Le mot de passe n'est pas dans Git : le fichier de la source de données le lit dans l'environnement du service.
+
+```bash
+echo 'METEO_GRAFANA_PWD=MOT_DE_PASSE_2' | sudo tee -a /etc/default/grafana-server > /dev/null
+sudo systemctl enable --now grafana-server
+systemctl status grafana-server
+```
+
+`MOT_DE_PASSE_2` est celui donné à `002_roles.sql` (voir « où taper quoi »). Éviter les guillemets et les espaces dans ce mot de passe.
+
+### 4.4 Ouvrir les écrans
+
+Depuis le navigateur du PC Windows : `http://192.168.50.10:3000`. Premier accès : utilisateur `admin`, mot de passe `admin`, que Grafana demande de changer. Menu *Dashboards* :
+
+- **Météo des instances ASE** : une ligne par instance, avec son icône (soleil, nuage, orage, lune), son état, l'âge du relevé et l'éventuelle erreur. Un clic sur le nom ouvre le détail. Rafraîchi toutes les 30 s.
+- **Détail d'une instance ASE** : choisir l'instance en haut ; état, un indicateur par ligne (valeur, unité, seuils, icône) et le tableau des processus du dernier relevé (requêtes en cours, bloqués avec leur bloqueur).
+
+Si les tableaux sont vides ou en erreur : *Connections → Data sources → meteo → Save & test*. Une erreur d'authentification vient de `METEO_GRAFANA_PWD` ou de la ligne `grafana_ro` dans `pg_hba.conf` (1.3) ; `sudo journalctl -u grafana-server -n 30 --no-pager` donne le détail.
+
 ## Réglages
 
 Variables de `/etc/scrutateur/scrutateur.env` (valeurs par défaut entre parenthèses) : `SCRUTATEUR_INTERVALLE_S` (60), `SCRUTATEUR_MAX_PARALLELE` (16), `SCRUTATEUR_ASE_LOGIN_TIMEOUT_S` (10), `SCRUTATEUR_ASE_REQUETE_TIMEOUT_S` (15), `SCRUTATEUR_ODBC_PILOTE` (FreeTDS), `SCRUTATEUR_TDS_VERSION` (5.0). Après modification : `sudo systemctl restart scrutateur`. Le scrutateur avertit au démarrage si un relevé peut dépasser l'intervalle.

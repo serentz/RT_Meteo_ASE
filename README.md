@@ -30,7 +30,7 @@ Voir [Installation des VM](docs/installation_vm.md), [Scrutateur](docs/scrutateu
 - `scrutateur/` : le script Python (une fonction par relevé d'instance, boucle parallèle), son service systemd et son modèle de configuration.
 - `sql/ase/` : la requête de supervision exécutée sur chaque instance ASE.
 - `sql/postgresql/` : schéma `meteo` (instances, mesures, seuils, vues d'état, fonction d'écriture) et rôles.
-- `grafana/` : futurs tableaux de bord et provisioning.
+- `grafana/` : provisioning (source PostgreSQL, tableaux de bord synthèse et détail), voir la section 4 de `docs/scrutateur.md`.
 - `tests/` : tests Python (`unittest`) et test SQL du schéma.
 
 ## État de validation

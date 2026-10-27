@@ -81,7 +81,7 @@ Les vues `meteo.etat_indicateur` (une ligne par instance et par indicateur : val
 
 **Niveau d'une instance.** Il reprend le plus grave de ses indicateurs, dans l'ordre orage > inconnu > nuage > soleil : une alarme connue prime, mais on n'affiche jamais soleil ni nuage s'il manque une mesure. L'icône « inconnu » est la lune endormie (`images/iconnes/lune_dors.png`).
 
-Vue globale : une tuile cliquable par instance, avec son icône. Vue détail : une ligne par indicateur avec valeur, unité, icône et seuils. Les tableaux de bord Grafana restent à réaliser (`grafana/`).
+Vue globale : une tuile cliquable par instance, avec son icône. Vue détail : une ligne par indicateur avec valeur, unité, icône et seuils. Dans Grafana (`grafana/`), la synthèse est un tableau d'une ligne par instance avec icône, cliquable vers le détail (pas de tuiles : aucun greffon n'est requis).
 
 ## Acceptation fonctionnelle
 
