@@ -116,6 +116,8 @@ Autres opérations, à taper dans la même console (`meteo=#`) :
 INSERT INTO meteo.instance (nom, login, password, host, port) VALUES ('ase_prod1', 'supervision', 'MOT_DE_PASSE', 'srv-ase1.exemple.fr', 5000);
 -- Changer un mot de passe :
 UPDATE meteo.instance SET password = 'NOUVEAU_MOT_DE_PASSE' WHERE nom = 'ASE01';
+-- Activer une instance déclarée mais inactive :
+UPDATE meteo.instance SET actif = true WHERE nom = 'ASE01';
 -- Retirer une instance de la surveillance :
 UPDATE meteo.instance SET actif = false WHERE nom = 'ASE01';
 ```
@@ -169,7 +171,7 @@ isql -U sa -S NOM_DU_SERVEUR_ASE -w 250
 
 - `/CHEMIN/INSTALLATION_ASE/` est le répertoire d'installation d'ASE ; `SYBASE.sh` y charge les variables d'environnement.
 - `NOM_DU_SERVEUR_ASE` est le nom du serveur déclaré dans le fichier `interfaces` d'ASE (`ps -eo cmd | grep [d]ataserver` l'affiche après `-s`).
-- `export LANG=en_US.UTF-8` est nécessaire quand la session est en `fr_FR.UTF-8` : `isql` refuse toute locale absente de `locales.dat` (voir le dépannage). Pour le rendre permanent : `echo 'export LANG=en_US.UTF-8' >> ~/.bash_profile`.
+- `export LANG=en_US.UTF-8` est nécessaire quand la session est en `fr_FR.UTF-8` : `isql` refuse toute locale absente de `locales.dat` (voir le dépannage). **Ne pas le mettre dans `~/.bash_profile`** d'une machine où l'on lance aussi `psql` : si la locale `en_US.UTF-8` n'est pas générée dans Ubuntu (cas du bastion), `psql` affiche `perl: warning: Setting locale failed`. Deux solutions : taper l'`export` seulement dans la session où l'on lance `isql`, ou générer la locale une fois (sur le bastion : `sudo locale-gen en_US.UTF-8 && sudo update-locale LANG=en_US.UTF-8`, puis se reconnecter) ; avec elle, `isql` et `psql` sont satisfaits tous les deux.
 - `isql` demande le mot de passe. L'invite devient `1>`. Taper l'instruction, puis `go` sur la ligne suivante pour l'exécuter. Quitter avec `quit`.
 
 Pour une instance existante, utiliser un compte d'administration habituel. Créer le login de supervision (dans `isql`) :
@@ -205,6 +207,41 @@ TDSVER=5.0 tsql -H 192.168.50.21 -p 5000 -U scrutateur
 `tsql` (client FreeTDS) demande le mot de passe `MOT_DE_PASSE_ASE`, puis affiche l'invite `1>`. Coller la requête de `sql/ase/supervision.sql`, du `SELECT` jusqu'à la ligne `go` incluse. Le tableau des processus s'affiche (il peut être vide si personne n'exécute de requête). Quitter avec `exit`.
 
 Pour une instance existante, remplacer l'adresse et le port : `TDSVER=5.0 tsql -H srv-ase1.exemple.fr -p 5000 -U supervision`.
+
+### 2.4 Démarrer ASE au démarrage de la VM (sur ase01) — non testé
+
+L'installation par `setup.bin` ne crée aucun service : après un redémarrage de ase01, ASE est arrêté. Trouver d'abord le script de démarrage :
+
+```bash
+ls /opt/sap/ASE-16_0/install/RUN_*
+```
+
+Puis créer le service (`sudo nano /etc/systemd/system/ase.service`), en remplaçant `RUN_ASE01` si le nom diffère :
+
+```ini
+[Unit]
+Description=SAP ASE ASE01
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=admin01
+Environment=LANG=en_US.UTF-8
+ExecStart=/bin/bash -c '. /opt/sap/SYBASE.sh && exec /opt/sap/ASE-16_0/install/RUN_ASE01'
+Restart=on-failure
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now ase
+systemctl status ase
+```
+
+Si ASE tourne déjà (lancé à la main), l'arrêter avant : `isql -Usa -SASE01`, puis `shutdown` et `go`. Pour arrêter proprement ensuite, préférer `shutdown` sous `isql` à `systemctl stop` (qui envoie un signal au processus).
 
 ## 3. Scrutateur sur le bastion
 
