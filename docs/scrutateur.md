@@ -2,43 +2,210 @@
 
 Le scrutateur est le script Python du bastion. Chaque minute il lit `meteo.instance` dans PostgreSQL, interroge en parallèle chaque instance ASE active et enregistre le résultat par `meteo.enregistrer_mesure(...)`. Règles et indicateurs : [architecture](architecture.md).
 
+## Avant de commencer : où taper quoi
+
+Chaque bloc de commandes de ce document est précédé de la **machine** sur laquelle le taper. Une commande tapée au mauvais endroit échoue ou ne fait rien. Les invites (le texte affiché avant le curseur) indiquent où l'on est :
+
+| Où | Comment s'y connecter | Invite affichée | Pour en sortir |
+|---|---|---|---|
+| PowerShell, sur le PC Windows | menu Démarrer, « PowerShell » | `PS I:\POC\RT_Meteo_ASE>` | fermer la fenêtre |
+| VM `pg01` (Ubuntu) | depuis PowerShell : `ssh admin01@192.168.50.11` | `admin01@pg01:~$` | `exit` |
+| VM `bastion` (Ubuntu) | depuis PowerShell : `ssh admin01@192.168.50.10` | `admin01@bastion:~$` | `exit` |
+| VM `ase01` (CentOS) | depuis PowerShell : `ssh admin01@192.168.50.21` | `[admin01@ase01 ~]$` | `exit` |
+| Console PostgreSQL (`psql`) | sur pg01 : `sudo -u postgres psql -d meteo` | `meteo=#` | `\q` |
+| Console ASE (`isql` ou `tsql`) | voir section 2 | `1>` | `quit` (`isql`), `exit` (`tsql`) |
+
+- Le mot de passe de `ssh` et de `sudo` est celui choisi pour `admin01` au lancement de `create_vms.ps1`.
+- À la première connexion à une VM, `ssh` affiche une empreinte et demande `Are you sure you want to continue connecting`. Répondre `yes`.
+- Dans une console PostgreSQL, chaque instruction SQL se termine par `;`. Dans `isql` et `tsql`, on tape `go` sur une ligne seule pour exécuter ce qu'on vient de saisir.
+- Copier-coller dans PowerShell : clic droit. Une ligne de bloc = une commande, sauf les lignes qui se terminent par `\` (la commande continue sur la ligne suivante).
+
+Trois mots de passe sont à choisir et sont désignés ainsi dans le document :
+
+| Nom | Sert à |
+|---|---|
+| `MOT_DE_PASSE_1` | rôle PostgreSQL `scrutateur` (utilisé par le script) |
+| `MOT_DE_PASSE_2` | rôle PostgreSQL `grafana_ro` (utilisé plus tard par Grafana) |
+| `MOT_DE_PASSE_ASE` | login ASE `scrutateur`, qui lit `sysprocesses` |
+
+Éviter l'apostrophe et l'antislash dans ces mots de passe.
+
 ## 1. PostgreSQL sur pg01
 
+### 1.1 Envoyer les scripts SQL sur pg01 (PowerShell, sur Windows)
+
+Dans `I:\POC\RT_Meteo_ASE`, après un `git pull --ff-only` :
+
+```powershell
+scp -r I:\POC\RT_Meteo_ASE\sql admin01@192.168.50.11:/tmp/
+```
+
+### 1.2 Installer PostgreSQL et créer la base (sur pg01)
+
+Se connecter : `ssh admin01@192.168.50.11`. Puis :
+
 ```bash
+sudo apt update
 sudo apt install -y postgresql
+psql --version
 sudo -u postgres createdb meteo
-# Copier le dossier sql/ du dépôt sur pg01 (lisible par l'utilisateur postgres), par exemple vers /tmp/sql
 sudo -u postgres psql -d meteo -v ON_ERROR_STOP=1 -f /tmp/sql/postgresql/001_schema.sql
 sudo -u postgres psql -d meteo -v ON_ERROR_STOP=1 \
   -v pwd_scrutateur='MOT_DE_PASSE_1' -v pwd_grafana='MOT_DE_PASSE_2' -f /tmp/sql/postgresql/002_roles.sql
 ```
 
-Les deux mots de passe ne doivent contenir ni apostrophe ni antislash. Autoriser le bastion à se connecter :
+- `psql --version` doit afficher PostgreSQL **15 ou plus** (Ubuntu 24.04 installe la 16) : le schéma utilise `UNIQUE NULLS NOT DISTINCT`.
+- Remplacer `MOT_DE_PASSE_1` et `MOT_DE_PASSE_2` par les mots de passe choisis, en gardant les apostrophes.
+- Pourquoi `sudo -u postgres` et pas simplement `psql` : sans option, `psql` se connecte avec le nom de l'utilisateur Linux (`admin01`) et PostgreSQL répond `FATAL: role "admin01" does not exist`. Le compte administrateur de PostgreSQL s'appelle `postgres`, et `sudo -u postgres` lance la commande sous ce compte.
 
-- `postgresql.conf` : `listen_addresses = '*'` (ou `'192.168.50.11'`) ;
-- `pg_hba.conf` : `host meteo scrutateur 192.168.50.10/32 scram-sha-256` et `host meteo grafana_ro 192.168.50.10/32 scram-sha-256` ;
-- `sudo systemctl restart postgresql`.
+Vérifier que le schéma et les rôles existent :
 
-Ubuntu Server n'active pas de pare-feu par défaut : aucune règle à ajouter sur pg01.
+```bash
+sudo -u postgres psql -d meteo -c "\dt meteo.*"
+sudo -u postgres psql -d meteo -c "\du"
+```
 
-Déclarer une instance (une ligne par instance ASE ; `nom` doit être résolu depuis le bastion : `/etc/hosts` contient `ase01`) :
+La première commande liste les tables `instance`, `mesure`, `processus`, `indicateur`, `seuil` et `parametre`. La seconde montre les rôles `scrutateur` et `grafana_ro`.
+
+### 1.3 Autoriser le bastion à se connecter (sur pg01)
+
+Par défaut PostgreSQL n'écoute que sur lui-même. Les commandes ci-dessous supposent l'organisation Debian/Ubuntu (`/etc/postgresql/<version>/main/`) :
+
+```bash
+ls /etc/postgresql
+```
+
+Cette commande affiche le numéro de version (par exemple `16`). Si ce n'est pas `16`, remplacer le nombre dans les trois commandes suivantes.
+
+```bash
+echo "listen_addresses = '*'" | sudo tee /etc/postgresql/16/main/conf.d/meteo.conf
+echo "host meteo scrutateur 192.168.50.10/32 scram-sha-256" | sudo tee -a /etc/postgresql/16/main/pg_hba.conf
+echo "host meteo grafana_ro 192.168.50.10/32 scram-sha-256" | sudo tee -a /etc/postgresql/16/main/pg_hba.conf
+sudo systemctl restart postgresql
+sudo ss -tlnp | grep 5432
+```
+
+La dernière commande doit montrer une ligne avec `0.0.0.0:5432` ou `*:5432`. Ubuntu Server n'active pas de pare-feu par défaut : aucune règle à ajouter sur pg01.
+
+### 1.4 Déclarer une instance ASE à surveiller (sur pg01, dans la console PostgreSQL)
+
+Ouvrir la console PostgreSQL :
+
+```bash
+sudo -u postgres psql -d meteo
+```
+
+L'invite devient `meteo=#`. Taper alors l'instruction suivante (en remplaçant le mot de passe) :
 
 ```sql
 INSERT INTO meteo.instance (nom, login, password) VALUES ('ase01', 'scrutateur', 'MOT_DE_PASSE_ASE');
--- Autre port ou autre nom d'hôte : colonnes port et host. Retirer une instance : UPDATE meteo.instance SET actif = false WHERE nom = 'ase01';
 ```
 
-Le mot de passe est stocké en clair : n'accorder aucun autre droit sur cette table (voir `002_roles.sql`).
+La console répond `INSERT 0 1`. Vérifier :
+
+```sql
+SELECT nom, host, port, actif FROM meteo.instance;
+```
+
+Puis quitter la console avec `\q`.
+
+Autres opérations, à taper dans la même console (`meteo=#`) :
+
+```sql
+-- Instance sur un autre port ou un autre nom de machine :
+INSERT INTO meteo.instance (nom, login, password, host, port) VALUES ('ase_prod1', 'supervision', 'MOT_DE_PASSE', 'srv-ase1.exemple.fr', 5000);
+-- Changer un mot de passe :
+UPDATE meteo.instance SET password = 'NOUVEAU_MOT_DE_PASSE' WHERE nom = 'ase01';
+-- Retirer une instance de la surveillance :
+UPDATE meteo.instance SET actif = false WHERE nom = 'ase01';
+```
+
+- Si le mot de passe contient une apostrophe, la doubler (`''`).
+- `nom` sert de nom de machine quand `host` est vide : depuis le bastion, `ase01` est résolu par `/etc/hosts`.
+- Le scrutateur relit cette table à chaque cycle : aucune relance n'est nécessaire.
+- Le mot de passe est stocké en clair : n'accorder aucun autre droit sur cette table (voir `sql/postgresql/002_roles.sql`).
+
+### 1.5 Vérifier que le bastion atteint PostgreSQL (sur le bastion)
+
+Se connecter : `ssh admin01@192.168.50.10`. Puis :
+
+```bash
+sudo apt update
+sudo apt install -y postgresql-client
+psql -h pg01 -U scrutateur -d meteo -c "SELECT nom, actif FROM meteo.instance"
+```
+
+`psql` demande le mot de passe : taper `MOT_DE_PASSE_1`. Le résultat doit lister l'instance déclarée en 1.4. Ici `-h` désigne la machine PostgreSQL, `-U` le rôle et `-d` la base. En cas d'échec, voir le dépannage en fin de document.
 
 ## 2. Instance ASE
 
-1. Créer un login de supervision dédié (voir `sql/ase/supervision.sql`) et vérifier qu'il lit `master..sysprocesses`. Aucune autre table n'est lue.
-2. L'instance doit écouter sur le réseau (fichier `interfaces`, pas seulement `localhost`). Le pare-feu CentOS de ase01 ouvre déjà SSH et le port 5000/tcp.
-3. Depuis le bastion, avant d'installer le scrutateur : `TDSVER=5.0 tsql -H ase01 -p 5000 -U scrutateur` (paquet `freetds-bin`), puis coller la requête de `sql/ase/supervision.sql` : elle rend le tableau des processus dont le scrutateur tire ses indicateurs.
+### 2.1 Se connecter à ASE avec `isql` (sur ase01 ou sur le serveur de l'instance)
+
+`isql` est le client en ligne de commande d'ASE. Il s'utilise sous le compte Linux qui a installé ASE (souvent `sybase`) et après chargement de l'environnement ASE :
+
+```bash
+. /CHEMIN/INSTALLATION_ASE/SYBASE.sh
+isql -U sa -S NOM_DU_SERVEUR_ASE -w 250
+```
+
+- `/CHEMIN/INSTALLATION_ASE/` est le répertoire d'installation d'ASE ; `SYBASE.sh` y charge les variables d'environnement.
+- `NOM_DU_SERVEUR_ASE` est le nom du serveur déclaré dans le fichier `interfaces` d'ASE.
+- `isql` demande le mot de passe. L'invite devient `1>`. Taper l'instruction, puis `go` sur la ligne suivante pour l'exécuter. Quitter avec `quit`.
+
+Pour une instance existante, utiliser un compte d'administration habituel. Créer le login de supervision (dans `isql`) :
+
+```
+1> sp_addlogin scrutateur, 'MOT_DE_PASSE_ASE'
+2> go
+```
+
+Le login doit pouvoir lire `master..sysprocesses`, seule table lue par le scrutateur. Le vérifier en 2.3. Voir aussi `sql/ase/supervision.sql`.
+
+### 2.2 Vérifier l'accès réseau depuis le bastion (sur le bastion)
+
+L'instance doit écouter sur le réseau (fichier `interfaces`, pas seulement `localhost`). Le pare-feu CentOS de ase01 ouvre déjà SSH et le port 5000/tcp. Depuis le bastion :
+
+```bash
+nc -zv 192.168.50.21 5000
+```
+
+La réponse doit contenir `succeeded`. Sinon : l'instance n'est pas démarrée, n'écoute pas sur le réseau, ou le port est différent.
+
+### 2.3 Essayer la requête du scrutateur depuis le bastion (sur le bastion)
+
+Se connecter : `ssh admin01@192.168.50.10`. Puis :
+
+```bash
+sudo apt install -y freetds-bin
+TDSVER=5.0 tsql -H 192.168.50.21 -p 5000 -U scrutateur
+```
+
+`tsql` (client FreeTDS) demande le mot de passe `MOT_DE_PASSE_ASE`, puis affiche l'invite `1>`. Coller la requête de `sql/ase/supervision.sql`, du `SELECT` jusqu'à la ligne `go` incluse. Le tableau des processus s'affiche (il peut être vide si personne n'exécute de requête). Quitter avec `exit`.
+
+Pour une instance existante, remplacer l'adresse et le port : `TDSVER=5.0 tsql -H srv-ase1.exemple.fr -p 5000 -U supervision`.
 
 ## 3. Scrutateur sur le bastion
 
-Depuis la racine du dépôt cloné sur le bastion :
+### 3.1 Récupérer le code sur le bastion (sur le bastion)
+
+Se connecter : `ssh admin01@192.168.50.10`. Puis :
+
+```bash
+sudo apt update
+sudo apt install -y git
+git clone --branch poc/hyperv-3-vms https://github.com/serentz/RT_Meteo_ASE.git
+cd RT_Meteo_ASE
+```
+
+Si le dépôt est privé ou si le bastion n'a pas d'accès à Internet, copier le dossier depuis Windows. Dans PowerShell (sur Windows), puis `cd ~` sur le bastion :
+
+```powershell
+scp -r I:\POC\RT_Meteo_ASE\scrutateur admin01@192.168.50.10:~/
+```
+
+Les commandes suivantes se tapent dans le dossier qui contient `scrutateur/`.
+
+### 3.2 Installer (sur le bastion)
 
 ```bash
 sudo apt install -y python3-venv unixodbc tdsodbc freetds-bin
@@ -47,18 +214,36 @@ sudo mkdir -p /opt/scrutateur/app /etc/scrutateur
 sudo cp -r scrutateur /opt/scrutateur/app/
 sudo python3 -m venv /opt/scrutateur/venv
 sudo /opt/scrutateur/venv/bin/pip install -r /opt/scrutateur/app/scrutateur/requirements.txt
-
 sudo install -m 0640 -o root -g scrutateur scrutateur/deploy/scrutateur.env.example /etc/scrutateur/scrutateur.env
-sudo nano /etc/scrutateur/scrutateur.env          # remplacer CHANGER_MOI (mot de passe du rôle scrutateur)
 sudo install -m 0644 scrutateur/deploy/scrutateur.service /etc/systemd/system/scrutateur.service
 sudo systemctl daemon-reload
 ```
 
-Essai d'une instance, sans rien écrire dans PostgreSQL :
+### 3.3 Renseigner le mot de passe PostgreSQL (sur le bastion)
+
+```bash
+sudo nano /etc/scrutateur/scrutateur.env
+```
+
+Le fichier contient une ligne `SCRUTATEUR_PG_DSN=...`. Remplacer `CHANGER_MOI` par `MOT_DE_PASSE_1`, pour obtenir :
+
+```
+SCRUTATEUR_PG_DSN=postgresql://scrutateur:MOT_DE_PASSE_1@pg01:5432/meteo
+```
+
+Enregistrer avec `Ctrl+O` puis `Entrée`, quitter avec `Ctrl+X`. Si le mot de passe contient `@ : / ? # %`, encoder ces caractères en pourcentage dans l'URL (`@` devient `%40`).
+
+### 3.4 Essayer, puis démarrer (sur le bastion)
+
+Ces commandes lancent le script sous le compte de service `scrutateur`, avec les variables du fichier ci-dessus.
+
+Essai d'une instance, sans rien écrire dans PostgreSQL (remplacer `ase01` par le nom déclaré en 1.4) :
 
 ```bash
 sudo -u scrutateur bash -c 'set -a; . /etc/scrutateur/scrutateur.env; set +a; cd /opt/scrutateur/app && /opt/scrutateur/venv/bin/python -m scrutateur --tester ase01'
 ```
+
+Le script lit l'instance dans `meteo.instance` (PostgreSQL doit donc être joignable et l'instance déclarée), interroge ASE et affiche en JSON les indicateurs (`nb_bloques`, `blocage_max_s`, `requete_max_s`, ...) et le tableau des processus lus (`details`). Si l'instance est absente ou inactive, il liste celles qu'il connaît ; si ASE ne répond pas, il affiche une ligne d'erreur.
 
 Un cycle complet (écrit dans PostgreSQL), puis démarrage du service :
 
@@ -68,34 +253,61 @@ sudo systemctl enable --now scrutateur
 journalctl -u scrutateur -f
 ```
 
-Vérification côté PostgreSQL : `sudo -u postgres psql -d meteo -c "SELECT * FROM meteo.etat_instance"`.
+`journalctl -f` suit le journal du service ; `Ctrl+C` arrête le suivi, pas le service.
 
-Réglages (variables de `scrutateur.env`) : `SCRUTATEUR_INTERVALLE_S` (60), `SCRUTATEUR_MAX_PARALLELE` (16), `SCRUTATEUR_ASE_LOGIN_TIMEOUT_S` (10), `SCRUTATEUR_ASE_REQUETE_TIMEOUT_S` (15), `SCRUTATEUR_ODBC_PILOTE` (FreeTDS), `SCRUTATEUR_TDS_VERSION` (5.0). Le scrutateur avertit au démarrage si un relevé peut dépasser l'intervalle.
+### 3.5 Lire le résultat (sur pg01)
+
+```bash
+sudo -u postgres psql -d meteo -c "SELECT * FROM meteo.etat_instance"
+```
+
+Pour voir les indicateurs de chaque instance, remplacer `meteo.etat_instance` par `meteo.etat_indicateur`.
+
+## Réglages
+
+Variables de `/etc/scrutateur/scrutateur.env` (valeurs par défaut entre parenthèses) : `SCRUTATEUR_INTERVALLE_S` (60), `SCRUTATEUR_MAX_PARALLELE` (16), `SCRUTATEUR_ASE_LOGIN_TIMEOUT_S` (10), `SCRUTATEUR_ASE_REQUETE_TIMEOUT_S` (15), `SCRUTATEUR_ODBC_PILOTE` (FreeTDS), `SCRUTATEUR_TDS_VERSION` (5.0). Après modification : `sudo systemctl restart scrutateur`. Le scrutateur avertit au démarrage si un relevé peut dépasser l'intervalle.
 
 ## Dépannage
 
-| Message ou symptôme | Piste |
-|---|---|
-| `Can't open lib 'FreeTDS'` | Paquet `tdsodbc` absent, ou pilote non déclaré dans `/etc/odbcinst.ini` : régler `SCRUTATEUR_ODBC_PILOTE` sur le nom qui y figure. |
-| `Login timeout expired`, `Unable to connect` | Réseau, port 5000, `interfaces` d'ASE qui n'écoute pas sur le réseau, nom non résolu depuis le bastion. Essayer `tsql` (section 2). |
-| `Login failed` | Mauvais login ou mot de passe dans `meteo.instance`. |
-| `Invalid column name 'execution_time'` ou droit refusé sur `sysprocesses` | La colonne n'existe pas sur cette version d'ASE, ou le login de supervision ne lit pas `master..sysprocesses` : essayer la requête de `sql/ase/supervision.sql` sous `isql`. |
-| Caractères accentués illisibles | Régler `ClientCharset` (en dur dans `scrutateur/ase.py`) selon le jeu de caractères d'ASE. |
-| Instance en « inconnu » alors qu'elle répond | Relevé périmé (plus de 180 s) : lire `journalctl -u scrutateur` et `erreur` dans `meteo.etat_instance`. |
+| Message ou symptôme | Où | Piste |
+|---|---|---|
+| `psql: FATAL: role "admin01" does not exist` | pg01 | `psql` a été lancé sans `sudo -u postgres` : utiliser `sudo -u postgres psql -d meteo`. |
+| `Connection refused` (port 5432) | bastion | `listen_addresses` non appliqué ou PostgreSQL non redémarré : refaire 1.3 et vérifier avec `sudo ss -tlnp \| grep 5432` sur pg01. |
+| `no pg_hba.conf entry for host` | bastion | Ligne `host meteo scrutateur 192.168.50.10/32 ...` absente de `pg_hba.conf` : refaire 1.3. |
+| `password authentication failed for user "scrutateur"` | bastion | `MOT_DE_PASSE_1` différent de celui donné à `002_roles.sql`, ou caractère spécial non encodé dans `scrutateur.env`. |
+| `could not translate host name "pg01"` | bastion | Résolution de nom : remplacer `pg01` par `192.168.50.11` dans la commande ou dans `scrutateur.env`. |
+| `Can't open lib 'FreeTDS'` | bastion | Paquet `tdsodbc` absent, ou pilote non déclaré dans `/etc/odbcinst.ini` : régler `SCRUTATEUR_ODBC_PILOTE` sur le nom qui y figure. |
+| `Login timeout expired`, `Unable to connect` | bastion | Réseau, port 5000, `interfaces` d'ASE qui n'écoute pas sur le réseau, nom non résolu. Essayer 2.2 puis 2.3. |
+| `Login failed` | bastion | Mauvais login ou mot de passe dans `meteo.instance` (corriger avec le `UPDATE` de 1.4). |
+| `Invalid column name 'execution_time'` ou droit refusé sur `sysprocesses` | bastion | La colonne n'existe pas sur cette version d'ASE, ou le login de supervision ne lit pas `master..sysprocesses` : essayer la requête de `sql/ase/supervision.sql` sous `isql`. |
+| Caractères accentués illisibles | bastion | Régler `ClientCharset` (en dur dans `scrutateur/ase.py`) selon le jeu de caractères d'ASE. |
+| Instance en « inconnu » alors qu'elle répond | pg01 | Relevé périmé (plus de 180 s) : lire `journalctl -u scrutateur` sur le bastion et la colonne `erreur` de `meteo.etat_instance`. |
 
 ## Tests
 
-Sans dépendance externe, depuis la racine du dépôt :
+Sans dépendance externe, depuis la racine du dépôt (sur une machine Linux avec Python 3) :
 
 ```bash
 python3 -m unittest discover -s tests -t . -v
 ```
 
-Test du schéma PostgreSQL, sur une base **de test** (tout est annulé à la fin) :
+Test du schéma PostgreSQL, sur une base **jetable** (tout est annulé à la fin du test). D'abord, dans PowerShell sur Windows :
+
+```powershell
+scp -r I:\POC\RT_Meteo_ASE\tests admin01@192.168.50.11:/tmp/
+```
+
+Puis sur pg01 (les scripts `sql` ont été envoyés en 1.1) :
 
 ```bash
-psql -d meteo_test -v ON_ERROR_STOP=1 -f tests/postgresql/test_schema.sql
+sudo -u postgres createdb meteo_test
+sudo -u postgres psql -d meteo_test -v ON_ERROR_STOP=1 -f /tmp/sql/postgresql/001_schema.sql
+sudo -u postgres psql -d meteo_test -v ON_ERROR_STOP=1 -v pwd_scrutateur='x' -v pwd_grafana='y' -f /tmp/sql/postgresql/002_roles.sql
+sudo -u postgres psql -d meteo_test -v ON_ERROR_STOP=1 -f /tmp/tests/postgresql/test_schema.sql
+sudo -u postgres dropdb meteo_test
 ```
+
+Le test affiche `OK : tous les controles du schema sont passes` avant la dernière commande, qui supprime la base jetable.
 
 ## État de validation
 
@@ -105,4 +317,4 @@ Réalisé dans l'environnement de préparation (Linux) :
 - schéma, vues, fonction d'écriture et droits des rôles testés sur un vrai PostgreSQL 16 ;
 - code du scrutateur exécuté de bout en bout contre ce PostgreSQL, avec une instance ASE simulée.
 
-**Non réalisé, à valider sur les VM** : connexion réelle à ASE (pyodbc + FreeTDS, TDS 5.0), pilote `psycopg`, service systemd, exécution de la requête ASE par le scrutateur sur une vraie instance (la requête elle-même a été essayée sous `isql` par l'équipe ; restent les quatre points à valider listés dans `sql/ase/supervision.sql`, dont le sens de `execution_time` et la présence éventuelle d'autres tâches internes dans le tableau), et les scénarios d'acceptation 1 à 3.
+**Non réalisé, à valider sur les VM** : toutes les commandes de ce document sur les VM elles-mêmes (écrites d'après l'organisation standard d'Ubuntu 24.04 et vérifiées sur un PostgreSQL 16 Debian, pas exécutées sur pg01 ni sur le bastion), connexion réelle à ASE (pyodbc + FreeTDS, TDS 5.0), pilote `psycopg`, service systemd, exécution de la requête ASE par le scrutateur sur une vraie instance (la requête elle-même a été essayée sous `isql` par l'équipe ; restent les quatre points à valider listés dans `sql/ase/supervision.sql`, dont le sens de `execution_time` et la présence éventuelle d'autres tâches internes dans le tableau), et les scénarios d'acceptation 1 à 3.

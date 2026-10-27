@@ -52,7 +52,7 @@ ssh admin01@192.168.50.11
 ssh admin01@192.168.50.21
 ```
 
-Sur chaque Ubuntu, exécuter `sudo cloud-init status --wait --long`, puis vérifier `hostname`, `ip -br address`, `ip route`, `getent hosts pg01 ase01 bastion`. Sur CentOS, vérifier ces mêmes commandes réseau et `systemctl is-active sshd`.
+Une fois connecté à une VM, on tape ses commandes dans son terminal ; `exit` ramène à PowerShell. Sur chaque Ubuntu, exécuter `sudo cloud-init status --wait --long`, puis vérifier `hostname`, `ip -br address`, `ip route`, `getent hosts pg01 ase01 bastion`. Sur CentOS, vérifier ces mêmes commandes réseau et `systemctl is-active sshd`.
 
 Le compte est membre de sudo/wheel et utilise son mot de passe pour sudo. Conserver la vérification des clés d'hôte SSH. Une recréation change ces clés : vérifier la nouvelle empreinte en console avant de mettre à jour known_hosts.
 
