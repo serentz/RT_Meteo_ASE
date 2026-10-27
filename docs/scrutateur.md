@@ -139,9 +139,25 @@ psql -h pg01 -U scrutateur -d meteo -c "SELECT nom, actif FROM meteo.instance"
 
 ## 2. Instance ASE
 
+### 2.0 Préparer le compte d'installation (sur ase01)
+
+Installer et lancer ASE sous un compte Linux **dédié, non root**, et non avec `sudo` : sinon le serveur tourne en root et tous ses fichiers appartiennent à root, ce qui gêne l'exploitation ensuite. Se connecter à ase01 (`ssh admin01@192.168.50.21`), puis :
+
+```bash
+sudo useradd -m sybase
+sudo mkdir -p /opt/sap
+sudo chown sybase:sybase /opt/sap
+sudo -i -u sybase
+```
+
+La dernière commande ouvre un terminal sous le compte `sybase` (invite `[sybase@ase01 ~]$`). Lancer l'installateur SAP depuis ce terminal, avec `/opt/sap` comme répertoire d'installation ; `exit` ramène au compte `admin01`. Le nom du compte et le répertoire sont des exemples : en prendre d'autres si l'équipe a une convention.
+
+- Les prérequis système (bibliothèques, paramètres du noyau, mémoire partagée) sont ceux de la documentation d'installation de SAP ASE 16.0 SP04 pour Linux. Ils ne sont pas vérifiés dans ce dépôt, et CentOS Stream 9 n'est pas une plate-forme certifiée pour ASE (voir le README).
+- Après une installation faite par erreur avec `sudo` : arrêter ASE s'il tourne, puis déplacer ou supprimer l'ancien répertoire d'installation (et les devices créés ailleurs) avant de recommencer. Ne pas installer deux fois dans le même répertoire.
+
 ### 2.1 Se connecter à ASE avec `isql` (sur ase01 ou sur le serveur de l'instance)
 
-`isql` est le client en ligne de commande d'ASE. Il s'utilise sous le compte Linux qui a installé ASE (souvent `sybase`) et après chargement de l'environnement ASE :
+`isql` est le client en ligne de commande d'ASE. Il s'utilise sous le compte `sybase` créé en 2.0 (`sudo -i -u sybase`) et après chargement de l'environnement ASE :
 
 ```bash
 . /CHEMIN/INSTALLATION_ASE/SYBASE.sh
