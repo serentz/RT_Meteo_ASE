@@ -23,6 +23,9 @@ class Reglages:
     ase_requete_timeout_s: int = 15
     odbc_pilote: str = "FreeTDS"
     tds_version: str = "5.0"
+    etalement_s: float = 20.0  # les releves d'un cycle sont etales sur cette duree (0 : tous d'un coup)
+    partition_index: int = 0  # ce scrutateur releve les instances dont instance_id % partition_total == partition_index
+    partition_total: int = 1
 
     @classmethod
     def depuis_env(cls, env: Mapping[str, str] | None = None) -> "Reglages":
@@ -32,6 +35,7 @@ class Reglages:
             raise ErreurConfiguration(
                 "SCRUTATEUR_PG_DSN est obligatoire, ex. postgresql://scrutateur:...@pg01:5432/meteo"
             )
+        index, total = _partition(env.get("SCRUTATEUR_PARTITION", ""))
         r = cls(
             pg_dsn=dsn,
             intervalle_s=_nombre(env, "SCRUTATEUR_INTERVALLE_S", 60.0, float),
@@ -40,6 +44,9 @@ class Reglages:
             ase_requete_timeout_s=_nombre(env, "SCRUTATEUR_ASE_REQUETE_TIMEOUT_S", 15, int),
             odbc_pilote=env.get("SCRUTATEUR_ODBC_PILOTE", "FreeTDS").strip() or "FreeTDS",
             tds_version=env.get("SCRUTATEUR_TDS_VERSION", "5.0").strip() or "5.0",
+            etalement_s=_nombre(env, "SCRUTATEUR_ETALEMENT_S", 20.0, float),
+            partition_index=index,
+            partition_total=total,
         )
         r.verifier()
         return r
@@ -51,6 +58,10 @@ class Reglages:
             raise ErreurConfiguration("SCRUTATEUR_MAX_PARALLELE doit etre >= 1")
         if self.ase_login_timeout_s < 1 or self.ase_requete_timeout_s < 1:
             raise ErreurConfiguration("Les delais ASE doivent etre >= 1 seconde")
+        if not 0 <= self.etalement_s <= self.intervalle_s / 2:
+            raise ErreurConfiguration("SCRUTATEUR_ETALEMENT_S doit etre compris entre 0 et la moitie de l'intervalle")
+        if self.partition_total < 1 or not 0 <= self.partition_index < self.partition_total:
+            raise ErreurConfiguration("SCRUTATEUR_PARTITION : forme i/N avec N >= 1 et 0 <= i < N, ex. 0/2")
 
     @property
     def pire_duree_releve_s(self) -> int:
@@ -66,3 +77,15 @@ def _nombre(env: Mapping[str, str], cle: str, defaut, type_):
         return type_(brut.strip())
     except ValueError:
         raise ErreurConfiguration(f"{cle} : valeur numerique attendue, recu {brut!r}") from None
+
+
+def _partition(brut: str) -> tuple[int, int]:
+    """'i/N' (i de 0 a N-1) -> (i, N). Vide : un seul scrutateur releve tout (0, 1)."""
+    brut = brut.strip()
+    if not brut:
+        return 0, 1
+    try:
+        i, n = brut.split("/")
+        return int(i), int(n)
+    except ValueError:
+        raise ErreurConfiguration(f"SCRUTATEUR_PARTITION : forme i/N attendue (ex. 0/2), recu {brut!r}") from None
