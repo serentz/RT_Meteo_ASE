@@ -493,10 +493,17 @@ Le test affiche `OK : tous les controles du schema sont passes` avant la derniè
 
 Réalisé dans l'environnement de préparation (Linux) :
 
-- 63 tests Python (calculs sur le tableau, transactions ouvertes, lecture ASE avec un faux pilote, parallélisme, panne d'une instance, instance bloquée non relancée, relecture de `meteo.instance`, panne de PostgreSQL, mot de passe masqué, cohérence entre la requête, le fichier SQL et le schéma) ;
+- 74 tests Python (calculs sur le tableau, transactions ouvertes, lecture ASE avec un faux pilote, parallélisme, étalement, partition, panne d'une instance, instance bloquée non relancée, relecture de `meteo.instance`, panne de PostgreSQL, mot de passe masqué, cohérence entre la requête, le fichier SQL et le schéma, disposition des tableaux de bord) ;
 - schéma, vues, fonction d'écriture et droits des rôles testés sur un vrai PostgreSQL 16 ;
 - code du scrutateur exécuté de bout en bout contre ce PostgreSQL, avec une instance ASE simulée.
 
-**Validé sur les VM de test (ASE01 16.0 SP04 PL08, PostgreSQL 16 sur pg01, scrutateur et Grafana sur le bastion)** : connexion à ASE par pyodbc et FreeTDS (TDS 5.0) avec le login `scrutateur`, écriture dans PostgreSQL, service systemd, vues, `execution_time` en millisecondes (converti en secondes), exclusion des sessions `AWAITING COMMAND`, blocage et bloqueur identifiés (scénarios d'acceptation 1 à 3), retour au soleil après un blocage, écrans Grafana (tuiles, liste, détail).
+**Validé sur les VM de test (ASE01 16.0 SP04 PL08, PostgreSQL 16 sur pg01, scrutateur et Grafana sur le bastion)**, captures dans [captures.md](captures.md) :
 
-**Non réalisé ou à valider** : arrêt d'ASE (la tuile « lune » inconnu, scénario 4), la requête des transactions ouvertes par le scrutateur dans le service (validée sous `isql`), l'instance de travail en PL06, le démarrage automatique d'ASE (2.4), les seuils (provisoires), et l'installation de Grafana sur un bastion neuf (section 4 écrite d'après l'installation faite ensemble).
+- connexion à ASE par pyodbc et FreeTDS (TDS 5.0) avec le login `scrutateur`, écriture dans PostgreSQL, service systemd, vues ;
+- `execution_time` en millisecondes (converti en secondes), exclusion des sessions `AWAITING COMMAND` ;
+- requête longue (nuage puis orage), blocage et bloqueur identifiés, transactions ouvertes, retour au soleil ;
+- arrêt d'ASE : tuile « lune » (inconnu) avec relevé en erreur ;
+- écrans Grafana : tuiles, liste, détail, avec le panneau d'état entièrement visible ;
+- 41 instances simulées (une ASE déclarée sous 41 noms) : relevés étalés (2 par seconde sur 20 s), durée d'un relevé de 7 ms en moyenne (p95 21 ms), deux scrutateurs en partition 0/2 et 1/2 (20 et 21 instances, aucun doublon), arrêt d'une partition : ses instances passent en lune après 180 s, classées en tête de la synthèse.
+
+**Non réalisé ou à valider** : le démarrage automatique d'ASE (2.4), l'instance de travail en PL06 (la requête principale y a été validée par l'équipe ; `execution_time` n'a été constaté en millisecondes qu'en PL08), les seuils (provisoires), l'installation de Grafana sur un bastion neuf (section 4 écrite d'après l'installation faite ensemble), et le comportement avec une centaine d'instances ASE réellement distinctes (réseaux et serveurs différents).
