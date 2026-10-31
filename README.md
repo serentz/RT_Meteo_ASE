@@ -22,10 +22,15 @@ Voir [Installation des VM](docs/installation_vm.md), [Scrutateur](docs/scrutateu
 - Cinq indicateurs par instance : temps max et moyen de blocage, temps max et moyen des requêtes en cours (calculés sur un tableau lu dans `master..sysprocesses`), et temps max des transactions ouvertes (`master..systransactions`). Le monitoring des deadlocks est retiré du POC.
 - Chaque indicateur est comparé à des seuils (warning / alarme) : soleil, nuage, orage ; « inconnu » (lune) si la mesure manque ou est périmée. L'instance affiche son pire niveau.
 
+## Captures d'écran
+
+Les écrans Grafana (soleil, nuage, orage, lune, blocage et bloqueur, transactions ouvertes) sont légendés dans [docs/captures.md](docs/captures.md) ; les images sont dans `images/Release1/`.
+
 ## Organisation
 
 - `infra/hyperv/create_vms.ps1` et `infra/hyperv/templates/` : infrastructure et modèles d'installation.
 - `infra/hyperv/check_vms.ps1` : diagnostic en lecture seule (Hyper-V, réseau de l'hôte, ping, port 22, bannière SSH).
+- `images/Release1/` : captures d'écran Grafana (voir `docs/captures.md`).
 - `images/iconnes/` : icônes météo (soleil, nuages, orages, lune endormie) pour l'affichage.
 - `scrutateur/` : le script Python (une fonction par relevé d'instance, boucle parallèle), son service systemd et son modèle de configuration.
 - `sql/ase/` : les deux requêtes exécutées sur chaque instance ASE (supervision des processus, transactions ouvertes).
