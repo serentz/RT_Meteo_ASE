@@ -208,9 +208,9 @@ TDSVER=5.0 tsql -H 192.168.50.21 -p 5000 -U scrutateur
 
 Pour une instance existante, remplacer l'adresse et le port : `TDSVER=5.0 tsql -H srv-ase1.exemple.fr -p 5000 -U supervision`.
 
-### 2.4 Démarrer ASE au démarrage de la VM (sur ase01) — non testé
+### 2.4 Démarrer ASE au démarrage de la VM (sur ase01)
 
-L'installation par `setup.bin` ne crée aucun service : après un redémarrage de ase01, ASE est arrêté. Trouver d'abord le script de démarrage :
+Testé sur ase01 : après un redémarrage de la VM, ASE remonte seul avec ce service. L'installation par `setup.bin` ne crée aucun service : sans lui, ASE est arrêté après un redémarrage de ase01. Trouver d'abord le script de démarrage :
 
 ```bash
 ls /opt/sap/ASE-16_0/install/RUN_*
@@ -502,8 +502,8 @@ Réalisé dans l'environnement de préparation (Linux) :
 - connexion à ASE par pyodbc et FreeTDS (TDS 5.0) avec le login `scrutateur`, écriture dans PostgreSQL, service systemd, vues ;
 - `execution_time` en millisecondes (converti en secondes), exclusion des sessions `AWAITING COMMAND` ;
 - requête longue (nuage puis orage), blocage et bloqueur identifiés, transactions ouvertes, retour au soleil ;
-- arrêt d'ASE : tuile « lune » (inconnu) avec relevé en erreur ;
+- arrêt d'ASE : tuile « lune » (inconnu) avec relevé en erreur ; démarrage automatique d'ASE au redémarrage de la VM (service systemd, 2.4) ;
 - écrans Grafana : tuiles, liste, détail, avec le panneau d'état entièrement visible ;
 - 41 instances simulées (une ASE déclarée sous 41 noms) : relevés étalés (2 par seconde sur 20 s), durée d'un relevé de 7 ms en moyenne (p95 21 ms), deux scrutateurs en partition 0/2 et 1/2 (20 et 21 instances, aucun doublon), arrêt d'une partition : ses instances passent en lune après 180 s, classées en tête de la synthèse.
 
-**Non réalisé ou à valider** : le démarrage automatique d'ASE (2.4), l'instance de travail en PL06 (la requête principale y a été validée par l'équipe ; `execution_time` n'a été constaté en millisecondes qu'en PL08), les seuils (provisoires), l'installation de Grafana sur un bastion neuf (section 4 écrite d'après l'installation faite ensemble), et le comportement avec une centaine d'instances ASE réellement distinctes (réseaux et serveurs différents).
+**Non réalisé ou à valider** : l'instance de travail en PL06 (la requête principale y a été validée par l'équipe ; `execution_time` n'a été constaté en millisecondes qu'en PL08), les seuils (provisoires), l'installation de Grafana sur un bastion neuf (section 4 écrite d'après l'installation faite ensemble), et le comportement avec une centaine d'instances ASE réellement distinctes (réseaux et serveurs différents).
