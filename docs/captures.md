@@ -26,6 +26,7 @@ Test sur les VM : l'instance `ase01` est déclarée sous 41 noms (`ase01`, `sim0
 
 | Image | Ce que l'on voit |
 |---|---|
+| [14_synthese_41_instances.png](../images/Release1/14_synthese_41_instances.png) | Synthèse avec les 41 instances déclarées (`ase01`, `sim01` à `sim40`) | Tuiles au soleil, relevés vieux de 0 à 60 s : tous les relevés sont à jour malgré le nombre d'instances (la fenêtre n'affiche que les premières lignes ; le défilement montre le reste). |
 | [09_etalement_2_par_seconde.png](../images/Release1/09_etalement_2_par_seconde.png) | Durée d'un relevé (205 relevés : moyenne 7 ms, p95 21 ms, max 25 ms) et répartition des relevés par seconde : 2 par seconde pendant 20 s au lieu de 41 à la même seconde. |
 | [10_partition_journal.png](../images/Release1/10_partition_journal.png) | Deux scrutateurs, `scrutateur@0` et `scrutateur@1` (`partition 0/2` et `1/2`) : 20 et 21 instances lancées à chaque cycle, soit 41 au total. |
 | [11_partition_sans_doublon.png](../images/Release1/11_partition_sans_doublon.png) | Aucune instance relevée plus de 3 fois en 3 minutes : la requête de contrôle ne renvoie aucune ligne. |
