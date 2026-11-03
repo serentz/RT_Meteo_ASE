@@ -45,23 +45,28 @@ def valeur_odbc(valeur: str) -> str:
     return "{" + valeur.replace("}", "}}") + "}"
 
 
+def pilote_sap(pilote: str) -> bool:
+    """Vrai pour le pilote ODBC de SAP (libsybdrvodb.so, 'Adaptive Server Enterprise'...) : il n'a pas les options de FreeTDS."""
+    p = pilote.lower()
+    return "sybdrvodb" in p or "adaptive server" in p or "sap ase" in p
+
+
 def chaine_connexion(instance: Instance, reglages: Reglages) -> str:
-    return ";".join(
-        [
-            f"DRIVER={{{reglages.odbc_pilote}}}",
-            f"SERVER={instance.hote}",
-            f"PORT={instance.port}",
-            f"UID={valeur_odbc(instance.login)}",
-            f"PWD={valeur_odbc(instance.password)}",
-            f"TDS_Version={reglages.tds_version}",
-            "ClientCharset=UTF-8",
-            "APP=scrutateur",
-        ]
-    )
+    """Chaine ODBC. DRIVER peut etre un nom declare dans odbcinst.ini ou le chemin complet de la bibliotheque du pilote."""
+    commun = [
+        f"DRIVER={{{reglages.odbc_pilote}}}",
+        f"SERVER={instance.hote}",
+        f"PORT={instance.port}",
+        f"UID={valeur_odbc(instance.login)}",
+        f"PWD={valeur_odbc(instance.password)}",
+    ]
+    if pilote_sap(reglages.odbc_pilote):
+        return ";".join(commun + ["Charset=utf8", "AppName=scrutateur"])
+    return ";".join(commun + [f"TDS_Version={reglages.tds_version}", "ClientCharset=UTF-8", "APP=scrutateur"])
 
 
 def creer_source_odbc(reglages: Reglages) -> Source:
-    """Source de production : pyodbc + FreeTDS (apt install unixodbc tdsodbc)."""
+    """Source de production : pyodbc + un pilote ODBC (FreeTDS : apt install unixodbc tdsodbc ; ou le pilote SAP du client ASE)."""
 
     def lire(instance: Instance) -> Lecture:
         import pyodbc  # import tardif : absent des postes de test

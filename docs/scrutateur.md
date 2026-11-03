@@ -562,7 +562,7 @@ Le test affiche `OK : tous les controles du schema sont passes` avant la derniè
 
 Réalisé dans l'environnement de préparation (Linux) :
 
-- 77 tests Python (calculs sur le tableau, transactions ouvertes, lecture ASE avec un faux pilote, parallélisme, étalement, partition, panne d'une instance, instance bloquée non relancée, relecture de `meteo.instance`, panne de PostgreSQL, mot de passe masqué, cohérence entre la requête, le fichier SQL et le schéma, disposition des tableaux de bord) ;
+- 78 tests Python (calculs sur le tableau, transactions ouvertes, lecture ASE avec un faux pilote, parallélisme, étalement, partition, panne d'une instance, instance bloquée non relancée, relecture de `meteo.instance`, panne de PostgreSQL, mot de passe masqué, cohérence entre la requête, le fichier SQL et le schéma, disposition des tableaux de bord) ;
 - compatibilité Python 3.6.8 (celui de RHEL 8) : mêmes tests passés sous un vrai Python 3.6.8 compilé depuis les sources, et sous Python 3.13 ; un test (`tests/test_compatibilite_python36.py`) interdit de réintroduire une construction absente de la 3.6. Le pilote `psycopg` 3.0 (série compatible avec la 3.6) et la connexion réelle sous Python 3.6 n'ont **pas** été essayés ;
 - schéma, vues, fonction d'écriture et droits des rôles testés sur un vrai PostgreSQL 16 ;
 - code du scrutateur exécuté de bout en bout contre ce PostgreSQL, avec une instance ASE simulée.

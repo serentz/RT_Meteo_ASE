@@ -28,15 +28,19 @@ curl -sI https://pypi.org/simple/ | head -1
 - `pg01:5432` doit être ouvert (adapter le nom si le stockage porte un autre nom). Sinon, un pare-feu ou `pg_hba.conf` bloque : voir les sections 1.3 et 1.5 de [scrutateur.md](scrutateur.md).
 - La seconde commande doit afficher `HTTP/… 200`. Si PyPI est inaccessible (proxy ou réseau coupé), utiliser l'installation depuis des fichiers copiés à la main (étape 3.3).
 
-**Spécifique à ASE : pilote ODBC.** `pyodbc` a besoin de la bibliothèque `unixODBC` et d'un pilote pour ASE (FreeTDS, ou le pilote SAP livré avec le client ASE). Sans root on ne peut pas les installer : contrôler qu'ils sont présents.
+**Spécifique à ASE : pilote ODBC.** `unixODBC` (`libodbc.so.2`) est présent. Il faut en plus un **pilote ODBC pour ASE**. `odbcinst -q -d` ne liste souvent que `ODBC Driver 18 for SQL Server` : c'est le pilote de Microsoft SQL Server, il **ne convient pas** à ASE. Sans root, utiliser le **pilote SAP livré avec le client ASE**, la bibliothèque `libsybdrvodb.so` du dossier `$SYBASE/DataAccess64/ODBC/lib` (le dossier contient aussi `libsybcsi_*.so` et `locales`). Il n'est pas nécessaire de le déclarer dans `/etc/odbcinst.ini` : on donne son **chemin complet** dans la configuration.
 
 ```bash
-ldconfig -p | grep libodbc
-odbcinst -q -d 2>/dev/null
-ls "$SYBASE"/DataAccess64/ODBC/lib 2>/dev/null
+echo "$SYBASE"
+ls "$SYBASE/SYBASE.sh" "$SYBASE/DataAccess64/ODBC/lib/libsybdrvodb.so"
+. "$SYBASE/SYBASE.sh"
+ldd "$SYBASE/DataAccess64/ODBC/lib/libsybdrvodb.so" | grep "not found"
 ```
 
-La première commande doit lister `libodbc.so.2`. Les deux autres doivent montrer un pilote (`FreeTDS`, ou un pilote SAP dans le dossier `DataAccess64/ODBC/lib` du client ASE, variable `$SYBASE` définie par l'environnement du compte `sybase`). Régler ensuite `SCRUTATEUR_ODBC_PILOTE` dans `scrutateur.env` sur le nom du pilote (par défaut `FreeTDS`) ; si aucun n'est présent, demander à un administrateur d'installer `unixODBC` et `freetds` (voir [installation_rhel8.md](installation_rhel8.md), étape 4).
+- `$SYBASE` doit afficher la racine du client ASE (par exemple `/opt/sap`) ; les deux fichiers doivent exister.
+- `SYBASE.sh` positionne `SYBASE`, `LD_LIBRARY_PATH` et les autres variables dont le pilote a besoin pour se charger. **Rien ne doit s'afficher après `grep "not found"`** : une ligne `… => not found` indique une bibliothèque manquante.
+- Dans `~/scrutateur/scrutateur.env` (étape 4), renseigner (en remplaçant `/opt/sap` par la valeur de `$SYBASE`) : `SCRUTATEUR_ODBC_PILOTE=/opt/sap/DataAccess64/ODBC/lib/libsybdrvodb.so` et `SYBASE=/opt/sap`. Le scrutateur reconnaît ce pilote et n'envoie pas les options propres à FreeTDS (`TDS_Version`...). `cron` ne connaît pas la variable `SYBASE` : c'est le fichier `scrutateur.env` qui la fournit au script de lancement (étape 6.2, qui charge ensuite `SYBASE.sh`).
+- Avec le pilote SAP, utiliser la **méthode 6.2 (cron)** pour le lancement : le service `systemd --user` ne charge pas `SYBASE.sh`.
 
 ## 2. Récupérer le code
 
@@ -151,6 +155,7 @@ Remplacer `ASE01` par le nom déclaré dans `meteo.instance` (majuscules compris
 ```bash
 cd ~/scrutateur/app
 set -a; . ~/scrutateur/scrutateur.env; set +a
+[ -f "$SYBASE/SYBASE.sh" ] && . "$SYBASE/SYBASE.sh"
 ~/scrutateur/venv/bin/python -m scrutateur --tester ASE01
 ~/scrutateur/venv/bin/python -m scrutateur --une-fois -v
 ```
@@ -208,6 +213,7 @@ cat > ~/scrutateur/lancer.sh <<'EOT'
 # Lance le scrutateur s'il ne tourne pas deja (verrou flock). Appele chaque minute par cron.
 cd "$HOME/scrutateur/app" || exit 1
 set -a; . "$HOME/scrutateur/scrutateur.env"; set +a
+[ -f "$SYBASE/SYBASE.sh" ] && . "$SYBASE/SYBASE.sh"   # pilote SAP : bibliotheques du client ASE
 exec flock -n "$HOME/scrutateur/scrutateur.lock" \
   "$HOME/scrutateur/venv/bin/python" -m scrutateur >> "$HOME/scrutateur/scrutateur.log" 2>&1
 EOT
@@ -250,4 +256,5 @@ Grafana ne s'installe pas sans droits d'administration (paquet RPM, port 3000, s
 | `UnicodeEncodeError` dans le journal | La ligne `PYTHONIOENCODING=utf-8` manque dans `scrutateur.env` (étape 4). |
 | `Connexion a PostgreSQL impossible` ou `failed to resolve host 'xxx@pg01'` | Mot de passe avec caractère spécial non encodé dans l'URL (étape 4), ou port 5432 fermé (étape 1). |
 | `Failed to connect to bus` avec `systemctl --user` | Voir la fin de 6.1. |
-| `Can't open lib 'FreeTDS'` ou `libodbc.so.2` introuvable | `unixODBC` ou le pilote ASE absent (étape 1) ou `SCRUTATEUR_ODBC_PILOTE` ne correspond pas au nom du pilote déclaré. |
+| `Can't open lib '/…/libsybdrvodb.so' : file not found` | `SYBASE.sh` non chargé (variable `SYBASE` absente de `scrutateur.env`) ou chemin du pilote faux : refaire les contrôles `ls` et `ldd` de l'étape 1. |
+| `Can't open lib 'FreeTDS'` ou `libodbc.so.2` introuvable | `unixODBC` ou le pilote absent, ou `SCRUTATEUR_ODBC_PILOTE` ne correspond pas à un pilote déclaré. |

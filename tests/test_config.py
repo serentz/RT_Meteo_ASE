@@ -1,6 +1,6 @@
 import unittest
 
-from scrutateur.ase import chaine_connexion, valeur_odbc
+from scrutateur.ase import chaine_connexion, pilote_sap, valeur_odbc
 from scrutateur.config import ErreurConfiguration, Reglages
 from tests.fakes import instance
 
@@ -32,6 +32,19 @@ class TestConfig(unittest.TestCase):
         self.assertIn("PORT=5000", cs)
         self.assertIn("TDS_Version=5.0", cs)
         self.assertIn("DRIVER={FreeTDS}", cs)
+
+    def test_chaine_odbc_pour_le_pilote_sap(self):
+        chemin = "/opt/sap/DataAccess64/ODBC/lib/libsybdrvodb.so"
+        self.assertTrue(pilote_sap(chemin))
+        self.assertTrue(pilote_sap("Adaptive Server Enterprise"))
+        self.assertFalse(pilote_sap("FreeTDS"))
+        cs = chaine_connexion(instance(1, password="p;w}d"), Reglages(pg_dsn="x", odbc_pilote=chemin))
+        self.assertIn("DRIVER={%s}" % chemin, cs)
+        self.assertIn("PWD={p;w}}d}", cs)
+        self.assertIn("SERVER=ase01", cs)
+        self.assertIn("PORT=5000", cs)
+        self.assertIn("Charset=utf8", cs)
+        self.assertNotIn("TDS_Version", cs)  # option de FreeTDS, inconnue du pilote SAP
 
     def test_partition_et_etalement(self):
         base = {"SCRUTATEUR_PG_DSN": "x"}
