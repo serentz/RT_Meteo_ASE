@@ -14,7 +14,7 @@ Le script Hyper-V prépare trois VM et installe leurs OS. Il n'installe ni ASE, 
 
 CentOS Stream est le choix hérité du script fourni ; sa compatibilité avec le SP/PL exact d'ASE doit être vérifiée avant installation du moteur. Aucune certification SAP de cette configuration n'est revendiquée.
 
-Voir [Installation des VM](docs/installation_vm.md), [Scrutateur](docs/scrutateur.md), [Synchronisation Windows/GitHub](docs/transfert_github.md) et [Spécification du monitoring](docs/architecture.md).
+Voir [Installation des VM](docs/installation_vm.md), [Scrutateur](docs/scrutateur.md), [Bastion sous RHEL 8.10](docs/installation_rhel8.md), [Synchronisation Windows/GitHub](docs/transfert_github.md) et [Spécification du monitoring](docs/architecture.md).
 
 ## Fonctionnement
 
