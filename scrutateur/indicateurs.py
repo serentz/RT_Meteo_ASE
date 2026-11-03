@@ -12,7 +12,7 @@ Definitions (docs/architecture.md) :
   il n'est ni bloque ni en requete. Les taches systeme et la connexion du scrutateur sont deja exclues
   par la requete SQL (voir ase.py).
 """
-from __future__ import annotations
+from typing import List
 
 from .modeles import Indicateurs, Lecture
 
@@ -44,5 +44,5 @@ def _requete_active(p) -> bool:
     return p.execution_s is not None and (p.cmd or "").strip().upper() != "AWAITING COMMAND"
 
 
-def _moyenne(valeurs: list[int]) -> float:
+def _moyenne(valeurs: List[int]) -> float:
     return round(sum(valeurs) / len(valeurs), 1) if valeurs else 0.0

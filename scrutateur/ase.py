@@ -10,9 +10,7 @@ execution_time n'est pas dans la page de documentation SAP consultee (voir sql/a
 La requete est reproduite a l'identique dans sql/ase/supervision.sql pour l'essayer sous isql.
 Le pilote est charge a la demande (import tardif) : le reste du scrutateur et ses tests n'en ont pas besoin.
 """
-from __future__ import annotations
-
-from typing import Callable
+from typing import Callable, Optional
 
 from .config import Reglages
 from .modeles import Instance, Lecture, LigneProcessus, LigneTransaction
@@ -120,7 +118,7 @@ def ligne_transaction(r) -> LigneTransaction:
     )
 
 
-def _horodatage(valeur) -> str | None:
+def _horodatage(valeur) -> Optional[str]:
     if valeur is None:
         return None
     if hasattr(valeur, "isoformat"):
@@ -128,14 +126,14 @@ def _horodatage(valeur) -> str | None:
     return str(valeur)
 
 
-def _ms_en_s(valeur) -> int | None:
+def _ms_en_s(valeur) -> Optional[int]:
     """execution_time (millisecondes) vers secondes entieres."""
     return None if valeur is None else int(float(valeur)) // 1000
 
 
-def _entier(valeur) -> int | None:
+def _entier(valeur) -> Optional[int]:
     return None if valeur is None else int(float(valeur))
 
 
-def _texte(valeur) -> str | None:
+def _texte(valeur) -> Optional[str]:
     return None if valeur is None else str(valeur).strip()

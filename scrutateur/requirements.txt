@@ -1,2 +1,8 @@
-psycopg[binary]>=3.1,<4
-pyodbc>=5,<6
+# Python 3.7 ou plus recent
+psycopg[binary]>=3.1,<4; python_version >= "3.7"
+pyodbc>=5,<6; python_version >= "3.7"
+# Python 3.6 (RHEL 8 : python3 = 3.6.8) : dernieres series compatibles avec la 3.6 (psycopg 3.0, pyodbc 4),
+# et le module dataclasses n'existe pas encore dans la bibliotheque standard de la 3.6
+psycopg[binary]>=3.0.15,<3.1; python_version < "3.7"
+pyodbc>=4.0.30,<5; python_version < "3.7"
+dataclasses>=0.8,<1; python_version < "3.7"
